@@ -1,0 +1,13 @@
+{
+  "name": "uc104-live-counter",
+  "version": "1.0.0",
+  "description": "UC 104 Pending Slots - Live Counter Dashboard",
+  "type": "module",
+  "scripts": {
+    "dev": "python3 serve.py",
+    "start": "python3 serve.py"
+  },
+  "keywords": ["dashboard", "live-counter", "google-sheets"],
+  "author": "",
+  "license": "ISC"
+}
