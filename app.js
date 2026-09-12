@@ -381,34 +381,35 @@
               <span>${status.label}</span>
             </div>
 
-            <!-- Less % -->
-            <div class="card-less-box">
-              <span class="card-less-label">Less %</span>
-              <span class="card-less-val">${escapeHtml(item.less || '-')}</span>
-            </div>
-
-            <!-- Action Row with View Link & 1-Click Copy -->
-            ${item.link && !status.isDisabled ? `
-              <div class="card-action-row">
-                <a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer" class="btn-product-link-small" title="Open product listing on Amazon">
-                  <span>View Link</span>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                </a>
-                <button class="btn-copy-link-small" data-link="${escapeHtml(item.link)}" title="Copy link to clipboard" aria-label="Copy link to clipboard">
-                  <svg class="copy-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                  </svg>
-                  <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                  </svg>
-                </button>
+            <!-- Combined Bottom Row: Less % Tag + View Link & Copy Icon -->
+            <div class="card-bottom-row">
+              <div class="card-less-tag" title="Discount / Less percentage">
+                <span class="card-less-label">Less</span>
+                <span class="card-less-val">${escapeHtml(item.less || '-')}</span>
               </div>
-            ` : `
-              <button class="btn-product-link-small is-disabled" disabled title="Slots are over or inactive">
-                <span>⛔ Slot Over</span>
-              </button>
-            `}
+
+              ${item.link && !status.isDisabled ? `
+                <div class="card-action-btns">
+                  <a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer" class="btn-product-link-small" title="Open product listing on Amazon">
+                    <span>View Link</span>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                  </a>
+                  <button class="btn-copy-link-small" data-link="${escapeHtml(item.link)}" title="Copy link to clipboard" aria-label="Copy link to clipboard">
+                    <svg class="copy-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                  </button>
+                </div>
+              ` : `
+                <button class="btn-product-link-small is-disabled" disabled title="Slots are over or inactive">
+                  <span>⛔ Slot Over</span>
+                </button>
+              `}
+            </div>
           </div>
         </div>
       `;
