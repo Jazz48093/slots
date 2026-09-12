@@ -15,7 +15,7 @@
     searchQuery: '',
     viewMode: 'grid', // 'grid' | 'table'
     hideSlotsOver: false,
-    countdown: 20,
+    countdown: 30,
     countdownInterval: null,
     isSyncing: false,
     lastSyncTimestamp: null,
@@ -30,6 +30,7 @@
     emptyState: document.getElementById('emptyState'),
     btnResetFilters: document.getElementById('btnResetFilters'),
     hideSlotsOverCheckbox: document.getElementById('hideSlotsOverCheckbox'),
+    hideSlotsTooltip: document.getElementById('hideSlotsTooltip'),
     
     // Header & Controls
     searchInput: document.getElementById('searchInput'),
@@ -459,11 +460,11 @@
   }
 
   /**
-   * 20-second countdown cycle
+   * 30-second countdown cycle
    */
   function resetCountdown() {
     clearInterval(state.countdownInterval);
-    state.countdown = 20;
+    state.countdown = 30;
     updateCountdownDisplay();
 
     state.countdownInterval = setInterval(() => {
@@ -602,8 +603,38 @@
     renderCurrentView();
   }
 
+  /**
+   * Automatically opens the "Hide slots over" tooltip after 3 seconds of loading
+   */
+  function setupTooltipOnboarding() {
+    setTimeout(() => {
+      const tooltip = elements.hideSlotsTooltip || document.getElementById('hideSlotsTooltip');
+      const toggleSwitch = document.querySelector('.toggle-hide-switch');
+      if (!tooltip) return;
+
+      tooltip.classList.add('auto-show');
+
+      // Dismiss gently if the user interacts or after 7 seconds
+      const dismiss = () => {
+        tooltip.classList.remove('auto-show');
+        if (toggleSwitch) {
+          toggleSwitch.removeEventListener('click', dismiss);
+          toggleSwitch.removeEventListener('mouseenter', dismiss);
+        }
+      };
+
+      if (toggleSwitch) {
+        toggleSwitch.addEventListener('click', dismiss);
+        toggleSwitch.addEventListener('mouseenter', dismiss);
+      }
+
+      setTimeout(dismiss, 7000);
+    }, 3000);
+  }
+
   // Initialization
   setupEventListeners();
+  setupTooltipOnboarding();
   fetchLiveData(true);
 
 })();
