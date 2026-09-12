@@ -122,12 +122,20 @@
       </div>
 
       <div class="filter-right-group">
-        <label class="toggle-hide-switch" title="Toggle to hide products with no slots left (Remaining ≤ 0)">
+        <label class="toggle-hide-switch" title="You can now hide &quot;slots over&quot; products from here" aria-label="Hide slots over products">
           <input type="checkbox" id="hideSlotsOverCheckbox">
           <span class="switch-track">
             <span class="switch-thumb"></span>
           </span>
           <span class="switch-label">Hide Slots Over</span>
+          <span class="switch-tooltip-trigger" aria-hidden="true">
+            <svg class="tooltip-info-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span class="switch-tooltip-bubble" role="tooltip">You can now hide "slots over" products from here</span>
+          </span>
         </label>
         <div class="filter-meta">
           <span class="last-sync-text" id="lastSyncTime">Syncing...</span>

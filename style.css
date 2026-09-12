@@ -616,6 +616,7 @@ body {
 }
 
 .toggle-hide-switch {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -624,7 +625,7 @@ body {
   background: rgba(255, 255, 255, 0.75);
   border: 1px solid var(--glass-border-subtle);
   border-radius: var(--radius-pill);
-  padding: 5px 12px 5px 8px;
+  padding: 5px 11px 5px 8px;
   transition: var(--transition-smooth);
 }
 
@@ -683,6 +684,59 @@ body {
 .toggle-hide-switch input[type="checkbox"]:checked ~ .switch-label {
   color: var(--primary-accent);
   font-weight: 700;
+}
+
+/* Hide Slots Over Tooltip Bubble */
+.switch-tooltip-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: color 150ms ease;
+  margin-left: -2px;
+}
+
+.toggle-hide-switch:hover .switch-tooltip-trigger {
+  color: var(--primary-accent);
+}
+
+.switch-tooltip-bubble {
+  position: absolute;
+  bottom: calc(100% + 9px);
+  right: 0;
+  background: rgba(15, 23, 42, 0.94);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #F8FAFC;
+  font-size: 0.73rem;
+  font-weight: 500;
+  padding: 6px 11px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: opacity 180ms ease, transform 180ms ease, visibility 180ms;
+  box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -4px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+}
+
+.switch-tooltip-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  right: 14px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: rgba(15, 23, 42, 0.94) transparent transparent transparent;
+}
+
+.toggle-hide-switch:hover .switch-tooltip-bubble {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
 }
 
 /* ==========================================================================
