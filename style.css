@@ -322,41 +322,6 @@ body {
   pointer-events: none;
 }
 
-/* View Switcher */
-.view-switch-group {
-  display: flex;
-  background: rgba(241, 245, 249, 0.85);
-  border: 1px solid var(--glass-border-subtle);
-  border-radius: 10px;
-  padding: 3px;
-  gap: 2px;
-}
-
-.view-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: none;
-  background: transparent;
-  padding: 6px 12px;
-  font-family: var(--font-family);
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  border-radius: 7px;
-  cursor: pointer;
-  transition: var(--transition-smooth);
-}
-
-.view-btn:hover {
-  color: var(--text-primary);
-}
-
-.view-btn.active {
-  background: #FFFFFF;
-  color: var(--primary-accent);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-}
 
 /* Countdown Pill */
 .countdown-pill {
@@ -932,16 +897,23 @@ body {
   color: var(--secondary-accent);
 }
 
-/* Small Centered Glass Pill Button (.btn-product-link-small) */
+/* Action Row with View Link & Copy Link Pill Button */
+.card-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+}
+
 .btn-product-link-small {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   width: fit-content;
-  margin: 0 auto;
-  padding: 6px 14px;
-  font-size: 0.74rem;
+  padding: 6px 13px;
+  font-size: 0.73rem;
   font-weight: 700;
   border-radius: var(--radius-pill);
   background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
@@ -951,6 +923,8 @@ body {
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.28);
   transition: var(--transition-smooth);
   cursor: pointer;
+  height: 29px;
+  box-sizing: border-box;
 }
 
 .btn-product-link-small:hover {
@@ -960,6 +934,53 @@ body {
 
 .btn-product-link-small:active {
   transform: translateY(0) scale(0.98);
+}
+
+/* 1-Click Discreet Copy Link Button */
+.btn-copy-link-small {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 29px;
+  height: 29px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--glass-border-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  flex-shrink: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.btn-copy-link-small:hover {
+  background: #FFFFFF;
+  color: var(--primary-accent);
+  border-color: rgba(79, 70, 229, 0.35);
+  transform: translateY(-2px) scale(1.06);
+  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.15);
+}
+
+.btn-copy-link-small:active {
+  transform: translateY(0) scale(0.95);
+}
+
+.btn-copy-link-small.copied {
+  background: #10B981 !important;
+  color: #FFFFFF !important;
+  border-color: #10B981 !important;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35) !important;
+  transform: scale(1.05);
+}
+
+.btn-copy-link-small.copied .copy-icon {
+  display: none !important;
+}
+
+.btn-copy-link-small.copied .check-icon {
+  display: inline-block !important;
 }
 
 /* Disabled Button State */
@@ -985,73 +1006,6 @@ body {
   box-shadow: var(--glass-shadow-card);
 }
 
-/* ==========================================================================
-   Full Executive Table View
-   ========================================================================== */
-.table-view-container {
-  overflow-x: auto;
-  border-radius: var(--radius-lg);
-  padding: 6px;
-}
-
-.executive-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.84rem;
-}
-
-.executive-table th {
-  background: rgba(241, 245, 249, 0.9);
-  color: var(--text-secondary);
-  font-weight: 700;
-  font-size: 0.72rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  padding: 12px 16px;
-  text-align: left;
-  border-bottom: 1px solid var(--glass-border-subtle);
-  white-space: nowrap;
-}
-
-.executive-table td {
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
-  color: var(--text-primary);
-  font-weight: 500;
-  vertical-align: middle;
-}
-
-.executive-table tbody tr {
-  transition: var(--transition-smooth);
-}
-
-.executive-table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.9);
-}
-
-.executive-table tbody tr.is-disabled {
-  opacity: 0.55;
-  background: rgba(248, 250, 252, 0.4);
-}
-
-.table-thumb {
-  width: 44px;
-  height: 44px;
-  border-radius: 8px;
-  object-fit: contain;
-  background: #FFFFFF;
-  border: 1px solid var(--glass-border-subtle);
-  padding: 2px;
-}
-
-.table-asin-code {
-  font-family: monospace;
-  font-size: 0.78rem;
-  background: rgba(241, 245, 249, 0.85);
-  padding: 3px 6px;
-  border-radius: 4px;
-  border: 1px solid var(--glass-border-subtle);
-}
 
 /* ==========================================================================
    Loading Purge View & Empty State

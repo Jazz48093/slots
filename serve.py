@@ -91,7 +91,10 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
 
-        if path == '/api/data':
+        if path == '/med':
+            self.path = '/med.html'
+            super().do_GET()
+        elif path == '/api/data':
             self.handle_api_data(parsed)
         elif path == '/api/asin-image':
             self.handle_asin_image(parsed)
@@ -115,6 +118,8 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
             # Parse query params
             params = urllib.parse.parse_qs(parsed.query)
             format_type = params.get('format', ['json'])[0]
+            col_param = params.get('col', ['g'])[0].lower()
+            is_med = col_param in ['i', 'med']
 
             if format_type == 'csv':
                 self.send_response(200)
@@ -142,7 +147,7 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
                 qty_idx = find_col(['qty', 'quantity', 'target'], 3)
                 done_idx = find_col(['done', 'order'], 4)
                 rem_idx = find_col(['remaining', 'rem', 'left', 'slot'], 5)
-                less_idx = find_col(['dhruv less', 'dhruv', 'less %', 'less'], 6)
+                less_idx = find_col(['med. less', 'med less', 'med'], 8) if is_med else find_col(['dhruv less', 'dhruv', 'less %', 'less'], 6)
 
                 asin_cache = load_asin_cache()
                 items = []

@@ -13,7 +13,6 @@
     filteredItems: [],
     currentFilter: 'all',
     searchQuery: '',
-    viewMode: 'grid', // 'grid' | 'table'
     hideSlotsOver: false,
     countdown: 30,
     countdownInterval: null,
@@ -24,8 +23,6 @@
   // DOM Elements
   const elements = {
     productGrid: document.getElementById('productGrid'),
-    tableViewContainer: document.getElementById('tableViewContainer'),
-    executiveTableBody: document.getElementById('executiveTableBody'),
     purgeLoadingView: document.getElementById('purgeLoadingView'),
     emptyState: document.getElementById('emptyState'),
     btnResetFilters: document.getElementById('btnResetFilters'),
@@ -39,10 +36,6 @@
     syncIcon: document.getElementById('syncIcon'),
     countdownSeconds: document.getElementById('countdownSeconds'),
     lastSyncTime: document.getElementById('lastSyncTime'),
-    
-    // View Switcher
-    btnViewGrid: document.getElementById('btnViewGrid'),
-    btnViewTable: document.getElementById('btnViewTable'),
     
     // Filter Tabs
     filterTabs: document.querySelectorAll('.filter-tab'),
@@ -149,7 +142,6 @@
     state.items = [];
     state.filteredItems = [];
     elements.productGrid.innerHTML = '';
-    elements.executiveTableBody.innerHTML = '';
     elements.purgeLoadingView.classList.add('active');
     elements.emptyState.style.display = 'none';
     if (elements.syncIcon) {
@@ -169,11 +161,13 @@
     purgeExistingData();
 
     const timestamp = Date.now();
+    const isMed = window.DATA_COL === 'i' || window.location.pathname.includes('/med') || window.location.search.includes('col=i') || window.location.search.includes('col=med');
+    const colQuery = isMed ? '&col=i' : '&col=g';
     let loadedItems = [];
 
     try {
       // 1. Try Zero-Cache Proxy Endpoint
-      const response = await fetch(`/api/data?_nocache=${timestamp}`, {
+      const response = await fetch(`/api/data?_nocache=${timestamp}${colQuery}`, {
         cache: 'no-store',
         headers: {
           'Pragma': 'no-cache',
@@ -244,7 +238,9 @@
       const qty = parseInt(row[3], 10) || 0;
       const done = parseInt(row[4], 10) || 0;
       const remaining = parseInt(row[5], 10) || 0;
-      const lessRaw = (row[6] || '').trim();
+      const isMed = window.DATA_COL === 'i' || window.location.pathname.includes('/med') || window.location.search.includes('col=i') || window.location.search.includes('col=med');
+      const lessColIdx = isMed ? 8 : 6;
+      const lessRaw = (row[lessColIdx] || '').trim();
       
       const less = (!lessRaw || lessRaw === '--' || lessRaw === '-' || lessRaw === '0%') ? '-' : lessRaw;
 
@@ -349,22 +345,13 @@
 
     if (count === 0) {
       elements.productGrid.style.display = 'none';
-      elements.tableViewContainer.style.display = 'none';
       elements.emptyState.style.display = 'flex';
       return;
     }
 
     elements.emptyState.style.display = 'none';
-
-    if (state.viewMode === 'grid') {
-      elements.productGrid.style.display = 'grid';
-      elements.tableViewContainer.style.display = 'none';
-      renderGrid();
-    } else {
-      elements.productGrid.style.display = 'none';
-      elements.tableViewContainer.style.display = 'block';
-      renderTable();
-    }
+    elements.productGrid.style.display = 'grid';
+    renderGrid();
   }
 
   /**
@@ -400,12 +387,23 @@
               <span class="card-less-val">${escapeHtml(item.less || '-')}</span>
             </div>
 
-            <!-- Small Centered Glass Pill Button -->
+            <!-- Action Row with View Link & 1-Click Copy -->
             ${item.link && !status.isDisabled ? `
-              <a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer" class="btn-product-link-small" title="Open product listing on Amazon">
-                <span>View Link</span>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-              </a>
+              <div class="card-action-row">
+                <a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer" class="btn-product-link-small" title="Open product listing on Amazon">
+                  <span>View Link</span>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                </a>
+                <button class="btn-copy-link-small" data-link="${escapeHtml(item.link)}" title="Copy link to clipboard" aria-label="Copy link to clipboard">
+                  <svg class="copy-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                  <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </button>
+              </div>
             ` : `
               <button class="btn-product-link-small is-disabled" disabled title="Slots are over or inactive">
                 <span>⛔ Slot Over</span>
@@ -417,46 +415,6 @@
     }).join('');
 
     elements.productGrid.innerHTML = html;
-  }
-
-  /**
-   * Render Full Executive Table View (Without Target, Done, or ASIN)
-   */
-  function renderTable() {
-    const html = state.filteredItems.map(item => {
-      const status = getSlotStatus(item.remaining);
-      const rowDisabled = status.isDisabled ? 'is-disabled' : '';
-      const imageUrl = item.image || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="%2394a3b8" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>';
-
-      return `
-        <tr class="${rowDisabled}">
-          <td>
-            <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(item.name)}" class="table-thumb" loading="lazy">
-          </td>
-          <td>
-            <strong>${escapeHtml(item.name)}</strong>
-          </td>
-          <td style="text-align: center;">
-            <span class="slot-badge ${status.badgeClass}" style="margin: 0; padding: 4px 12px; font-size: 0.72rem; width: auto; display: inline-flex;">${status.label}</span>
-          </td>
-          <td style="text-align: center; font-weight: 700; color: var(--secondary-accent); font-size: 0.85rem;">
-            ${escapeHtml(item.less || '-')}
-          </td>
-          <td style="text-align: center;">
-            ${item.link && !status.isDisabled ? `
-              <a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer" class="btn-product-link-small" style="padding: 4px 12px; font-size: 0.7rem;">
-                <span>Link</span>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-              </a>
-            ` : `
-              <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600;">Disabled</span>
-            `}
-          </td>
-        </tr>
-      `;
-    }).join('');
-
-    elements.executiveTableBody.innerHTML = html;
   }
 
   /**
@@ -557,13 +515,41 @@
       });
     });
 
-    // View Switcher Buttons
-    elements.btnViewGrid.addEventListener('click', () => {
-      setViewMode('grid');
-    });
+    // 1-Click Copy Link to Clipboard
+    elements.productGrid.addEventListener('click', async (e) => {
+      const copyBtn = e.target.closest('.btn-copy-link-small');
+      if (!copyBtn) return;
 
-    elements.btnViewTable.addEventListener('click', () => {
-      setViewMode('table');
+      e.preventDefault();
+      e.stopPropagation();
+
+      const link = copyBtn.dataset.link;
+      if (!link) return;
+
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(link);
+        } else {
+          const textarea = document.createElement('textarea');
+          textarea.value = link;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textarea);
+        }
+
+        copyBtn.classList.add('copied');
+        showToast('Link copied to clipboard ✓', '📋');
+
+        setTimeout(() => {
+          copyBtn.classList.remove('copied');
+        }, 1500);
+      } catch (err) {
+        console.error('Copy link error:', err);
+        showToast('Unable to copy link', '⚠️');
+      }
     });
 
     // Global Keyboard Shortcuts
@@ -592,15 +578,6 @@
       t.classList.toggle('active', t.dataset.filter === filter);
     });
     applyFiltersAndRender();
-  }
-
-  function setViewMode(mode) {
-    state.viewMode = mode;
-    elements.btnViewGrid.classList.toggle('active', mode === 'grid');
-    elements.btnViewGrid.setAttribute('aria-pressed', mode === 'grid');
-    elements.btnViewTable.classList.toggle('active', mode === 'table');
-    elements.btnViewTable.setAttribute('aria-pressed', mode === 'table');
-    renderCurrentView();
   }
 
   /**

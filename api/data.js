@@ -24,7 +24,7 @@ function fetchTextWithRedirect(url) {
   });
 }
 
-function parseCsv(text, asinCache) {
+function parseCsv(text, asinCache, col = 'g') {
   const lines = text.split(/\r?\n/).filter(l => l.trim());
   if (lines.length <= 1) return [];
 
@@ -56,13 +56,17 @@ function parseCsv(text, asinCache) {
     return defIdx;
   }
 
+  const isMed = String(col).toLowerCase() === 'i' || String(col).toLowerCase() === 'med';
+
   const nameIdx = findCol(['sku', 'product', 'item'], 0);
   const asinIdx = findCol(['asin'], 1);
   const linkIdx = findCol(['link', 'url'], 2);
   const qtyIdx = findCol(['qty', 'quantity', 'target'], 3);
   const doneIdx = findCol(['done', 'order'], 4);
   const remIdx = findCol(['remaining', 'rem', 'left', 'slot'], 5);
-  const lessIdx = findCol(['dhruv less', 'dhruv', 'less %', 'less'], 6);
+  const lessIdx = isMed
+    ? findCol(['med. less', 'med less', 'med'], 8)
+    : findCol(['dhruv less', 'dhruv', 'less %', 'less'], 6);
 
   const items = [];
   for (let i = 1; i < lines.length; i++) {
@@ -120,7 +124,8 @@ export default async function handler(req, res) {
     const csvText = await fetchTextWithRedirect(nocacheUrl);
 
     // 3. Parse and enrich
-    const items = parseCsv(csvText, asinCache);
+    const col = (req.query && (req.query.col || req.query.c)) || 'g';
+    const items = parseCsv(csvText, asinCache, col);
 
     res.status(200).json({
       status: 'success',

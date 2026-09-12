@@ -1,5 +1,9 @@
 {
   "version": 2,
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/med", "destination": "/med.html" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
