@@ -62,9 +62,9 @@
   /**
    * Evaluates slot count and produces user-defined badge, text, and disabled status.
    * Rules:
-   *  - > 3: "More than 3 orders remaining"
-   *  - 3: "3 orders left"
-   *  - 2: "2 orders left"
+   *  - > 3: "3+ slots left"
+   *  - 3: "3 slots left"
+   *  - 2: "2 slots left"
    *  - 1: "1 order left"
    *  - 0: "No slots left"
    *  - < 0: "No slots left" (Product disabled & link disabled)
@@ -72,7 +72,7 @@
   function getSlotStatus(remaining) {
     if (remaining > 3) {
       return {
-        label: 'More than 3 slots remaining',
+        label: '3+ slots left',
         badgeClass: 'slot-badge-available',
         remClass: '',
         isDisabled: false,
