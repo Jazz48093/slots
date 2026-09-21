@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UC 104 pending slots</title>
+  <meta name="description" content="Executive live dashboard for UC 104 pending slots, tracking target orders, remaining slots, and discounts directly from Google Sheets.">
+  
+  <!-- Modern Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Ambient Luminous Background Orbs -->
+  <div class="ambient-orb orb-1" aria-hidden="true"></div>
+  <div class="ambient-orb orb-2" aria-hidden="true"></div>
+  <div class="ambient-orb orb-3" aria-hidden="true"></div>
+
+  <div class="app-container">
+    <!-- Executive Top Header -->
+    <header class="glass-panel main-header">
+      <div class="header-left">
+        <div class="brand-badge">
+          <div class="brand-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <path d="M16 10a4 4 0 0 1-8 0"></path>
+            </svg>
+          </div>
+          <div class="brand-titles">
+            <div class="title-row">
+              <h1 class="page-title">UC 104 pending slots</h1>
+              <span class="live-pill" id="livePill" title="Direct live stream from Google Sheets Tab 104">
+                <span class="pulse-dot"></span>
+                <span class="live-text">Live Sync</span>
+              </span>
+            </div>
+            <p class="page-subtitle">Real-time Order Targets, Remaining Slots &amp; Less %</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <!-- Instant Search Box -->
+        <div class="search-box">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="searchInput" placeholder="Search SKU, ASIN, discount..." autocomplete="off" spellcheck="false">
+          <button id="searchClearBtn" class="search-clear-btn" aria-label="Clear search" title="Clear (Esc)">&times;</button>
+          <span class="search-hint">/</span>
+        </div>
+
+
+        <!-- Auto-refresh Countdown Pill -->
+        <div class="countdown-pill" id="countdownBadge" title="Next automatic anti-cache refresh">
+          <svg class="timer-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          <span id="countdownSeconds">30s</span>
+        </div>
+
+        <!-- Refresh Amazon Images Button -->
+        <button id="btnRefreshImages" class="btn-secondary-glass" title="Refresh all product images from Amazon">
+          <svg id="refreshImagesIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+          <span>Refresh Images</span>
+        </button>
+
+        <!-- Sync Latest Data Button -->
+        <button id="btnSyncNow" class="btn-primary-glass" title="Fetch fresh data from Google Sheet without cache (R)">
+          <svg id="syncIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
+            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+          </svg>
+          <span>Sync Latest Data</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Executive KPI Summary Cards Row -->
+    <!-- Filter Segment Tabs Bar -->
+    <nav class="filter-bar glass-panel" aria-label="Filter products">
+      <div class="filter-tabs">
+        <button class="filter-tab active" data-filter="all" id="tabAll">
+          <span>All Products</span>
+          <span class="tab-count" id="countAll">0</span>
+        </button>
+        <button class="filter-tab" data-filter="available" id="tabAvailable">
+          <span class="tab-dot dot-emerald"></span>
+          <span>Available (&gt; 3 slots)</span>
+          <span class="tab-count" id="countAvailable">0</span>
+        </button>
+        <button class="filter-tab" data-filter="low" id="tabLow">
+          <span class="tab-dot dot-amber"></span>
+          <span>Low Slots (1–3 left)</span>
+          <span class="tab-count" id="countLow">0</span>
+        </button>
+        <button class="filter-tab" data-filter="over" id="tabOver">
+          <span class="tab-dot dot-slate"></span>
+          <span>Slot Over / Done (≤ 0)</span>
+          <span class="tab-count" id="countOver">0</span>
+        </button>
+      </div>
+
+      <div class="filter-right-group">
+        <label class="toggle-hide-switch" title="Slots over (≤ 0) are hidden by default — click toggle to show them" aria-label="Show slots over products">
+          <input type="checkbox" id="showSlotsOverCheckbox">
+          <span class="switch-track">
+            <span class="switch-thumb"></span>
+          </span>
+          <span class="switch-label">Show Slots Over</span>
+          <span class="switch-tooltip-trigger" aria-hidden="true">
+            <svg class="tooltip-info-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span class="switch-tooltip-bubble" id="hideSlotsTooltip" role="tooltip">Slots over (≤ 0) are hidden by default — click to show</span>
+          </span>
+        </label>
+        <div class="filter-meta">
+          <span class="last-sync-text" id="lastSyncTime">Syncing...</span>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content Area: Zero-Cache Purge Animation & 6-Col Grid View -->
+    <main class="main-content" id="mainContent">
+      <!-- Instant Zero-Cache Data Purging Overlay View -->
+      <div class="purge-loading-overlay" id="purgeLoadingView">
+        <div class="purge-spinner-box glass-panel">
+          <div class="purge-spinner"></div>
+          <p class="purge-title">Purging Cache &amp; Fetching Live Sheet</p>
+          <p class="purge-desc">Connecting directly to Google Sheets Tab 104...</p>
+        </div>
+      </div>
+
+      <!-- 6-Column Card Grid (Desktop) -->
+      <div class="product-grid" id="productGrid" style="display: grid;">
+        <!-- Dynamically rendered via app.js -->
+      </div>
+
+      <!-- Empty Filter State -->
+      <div class="empty-state glass-panel" id="emptyState" style="display: none;">
+        <div class="empty-icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            <line x1="8" y1="11" x2="14" y2="11"></line>
+          </svg>
+        </div>
+        <h3>No Matching Products Found</h3>
+        <p>No products match your current search query or slot filter criteria.</p>
+        <button class="btn-secondary-glass" id="btnResetFilters">Reset Filters</button>
+      </div>
+    </main>
+
+    <!-- Sleek Minimalist Footer -->
+    <footer class="app-footer">
+      <div class="footer-content">
+        <span>Connected to Google Sheet: <strong>Tab 104 Live Counter</strong></span>
+        <span>•</span>
+        <span>Zero-Cache Live Proxy Architecture</span>
+        <span>•</span>
+        <span>Design: Minimalist Glassmorphism</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+  <!-- Explicit Column G Identifier for Dhruv Page -->
+  <script>window.DATA_COL = 'g';</script>
+  <script src="app.js"></script>
+</body>
+</html>

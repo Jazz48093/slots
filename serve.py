@@ -86,7 +86,10 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
 
-        if path == '/med':
+        if path in ['/dhruv', '/dhruv/']:
+            self.path = '/dhruv.html'
+            super().do_GET()
+        elif path in ['/med', '/med/']:
             self.path = '/med.html'
             super().do_GET()
         elif path == '/api/data':
