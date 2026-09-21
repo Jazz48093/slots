@@ -8,66 +8,55 @@ import io
 import time
 import os
 import re
+import threading
+
+from fetch_asin_images import (
+    extract_image_for_asin,
+    refresh_all_images,
+    load_cache as load_asin_cache,
+    save_cache as save_asin_cache,
+    CACHE_FILE
+)
 
 PORT = 8088
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1EDMwxLBoYV_-4RXul07q4NiXGF6uxiDTaakn4Akhpoc/export?format=csv&gid=1705723818"
-CACHE_FILE = os.path.join(os.path.dirname(__file__), "asin_cache.json")
 
-AMAZON_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Accept-Language': 'en-IN,en-GB;q=0.9,en;q=0.8',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-}
+# Background worker lock to prevent overlapping sync threads
+_bg_fetch_lock = threading.Lock()
+_bg_fetching_asins = set()
 
-def load_asin_cache():
-    if os.path.exists(CACHE_FILE):
+def background_fetch_missing_asins(asins):
+    global _bg_fetching_asins
+    with _bg_fetch_lock:
+        to_fetch = [a for a in asins if a not in _bg_fetching_asins]
+        if not to_fetch:
+            return
+        _bg_fetching_asins.update(to_fetch)
+
+    def worker():
+        global _bg_fetching_asins
         try:
-            with open(CACHE_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
-
-def save_asin_cache(cache):
-    try:
-        with open(CACHE_FILE, 'w', encoding='utf-8') as f:
-            json.dump(cache, f, indent=2)
-    except Exception:
-        pass
-
-def fetch_asin_image(asin):
-    if not asin or len(asin) != 10:
-        return None
-    url = f"https://www.amazon.in/dp/{asin}"
-    try:
-        req = urllib.request.Request(url, headers=AMAZON_HEADERS)
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            html = resp.read().decode('utf-8', errors='ignore')
-            m1 = re.search(r'id="landingImage"[^>]*data-a-dynamic-image="([^"]+)"', html)
-            if m1:
-                imgs = json.loads(m1.group(1).replace('&quot;', '"'))
-                if imgs:
-                    raw_img = list(imgs.keys())[0]
-                    return re.sub(r'\._[A-Z0-9_,]+_\.', '.', raw_img)
-            m2 = re.search(r"'colorImages':\s*\{\s*'initial':\s*(\[\{.*?\}\])\s*\},", html, re.DOTALL)
-            if m2:
+            cache = load_asin_cache()
+            updated = False
+            for asin in to_fetch:
                 try:
-                    raw = m2.group(1)
-                    raw = re.sub(r'([a-zA-Z0-9_]+):', r'"\1":', raw)
-                    raw = raw.replace("'", '"')
-                    data = json.loads(raw)
-                    if data:
-                        img = data[0].get('hiRes') or data[0].get('large')
-                        if img:
-                            return re.sub(r'\._[A-Z0-9_,]+_\.', '.', img)
-                except Exception:
-                    pass
-            m3 = re.search(r'https://m\.media-amazon\.com/images/I/([a-zA-Z0-9_\-\+\%]+)\.(?:jpg|png)', html)
-            if m3:
-                return re.sub(r'\._[A-Z0-9_,]+_\.', '.', m3.group(0))
-    except Exception:
-        pass
-    return None
+                    _, img = extract_image_for_asin(asin)
+                    if img:
+                        cache[asin] = img
+                        updated = True
+                        print(f"✓ [Background Sync] Cached image for {asin} -> {img}")
+                except Exception as e:
+                    print(f"✗ [Background Sync] Error fetching {asin}: {e}")
+            if updated:
+                save_asin_cache(cache)
+        finally:
+            with _bg_fetch_lock:
+                for a in to_fetch:
+                    _bg_fetching_asins.discard(a)
+
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+
 
 class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
@@ -76,11 +65,17 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Pragma', 'no-cache')
         self.send_header('Expires', '0')
         self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, HEAD')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Pragma, Cache-Control')
         super().end_headers()
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.end_headers()
 
     def do_HEAD(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path in ['/api/data', '/api/asin-image']:
+        if parsed.path in ['/api/data', '/api/asin-image', '/api/refresh-images']:
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
             self.end_headers()
@@ -98,8 +93,18 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_api_data(parsed)
         elif path == '/api/asin-image':
             self.handle_asin_image(parsed)
+        elif path == '/api/refresh-images':
+            self.handle_refresh_images(parsed)
         else:
             super().do_GET()
+
+    def do_POST(self):
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == '/api/refresh-images':
+            self.handle_refresh_images(parsed)
+        else:
+            self.send_response(404)
+            self.end_headers()
 
     def handle_api_data(self, parsed):
         # Cache busting request to Google Sheets
@@ -151,6 +156,7 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
 
                 asin_cache = load_asin_cache()
                 items = []
+                missing_asins = []
 
                 for r in reader[1:]:
                     if not any(r):
@@ -177,7 +183,7 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
                         elif not link.startswith('http://') and not link.startswith('https://'):
                             link = 'https://' + link
 
-                    # Normalize less percentage: if empty, "--", or "-", keep as "-"
+                    # Normalize less percentage
                     less_clean = less_raw.strip()
                     if not less_clean or less_clean in ['--', '-', '0%', 'N/A', 'na', 'null', 'none']:
                         less_display = '-'
@@ -201,6 +207,8 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
 
                     # Look up image in cache
                     image = asin_cache.get(asin, "")
+                    if asin and not image:
+                        missing_asins.append(asin)
 
                     items.append({
                         "name": name,
@@ -212,6 +220,10 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
                         "less": less_display,
                         "image": image
                     })
+
+                # Automatically trigger background image scrape for missing ASINs
+                if missing_asins:
+                    background_fetch_missing_asins(missing_asins)
 
             response_data = {
                 "status": "success",
@@ -235,6 +247,7 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
     def handle_asin_image(self, parsed):
         params = urllib.parse.parse_qs(parsed.query)
         asin = params.get('asin', [''])[0].strip()
+        force_refresh = params.get('refresh', ['0'])[0] in ['1', 'true', 'yes'] or params.get('force', ['0'])[0] in ['1', 'true', 'yes']
 
         if not asin:
             self.send_response(400)
@@ -244,11 +257,12 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         cache = load_asin_cache()
-        if asin in cache and cache[asin]:
-            img = cache[asin]
-        else:
-            img = fetch_asin_image(asin)
-            if img:
+        img = cache.get(asin, "")
+
+        if force_refresh or not img:
+            _, fetched_img = extract_image_for_asin(asin)
+            if fetched_img:
+                img = fetched_img
                 cache[asin] = img
                 save_asin_cache(cache)
 
@@ -257,10 +271,23 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps({"asin": asin, "image": img or ""}).encode('utf-8'))
 
+    def handle_refresh_images(self, parsed):
+        params = urllib.parse.parse_qs(parsed.query)
+        force = params.get('force', ['0'])[0] in ['1', 'true', 'yes'] or params.get('all', ['0'])[0] in ['1', 'true', 'yes']
+        asin_param = params.get('asin', [None])[0]
+
+        start_time = time.time()
+        res = refresh_all_images(force=force, specific_asin=asin_param, max_workers=8)
+        res["duration_seconds"] = round(time.time() - start_time, 2)
+
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(res).encode('utf-8'))
+
 def run_server():
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     socketserver.TCPServer.allow_reuse_address = True
-    port = PORT
     for p in range(PORT, PORT + 10):
         try:
             with socketserver.TCPServer(("", p), LiveProxyHandler) as httpd:

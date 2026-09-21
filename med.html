@@ -66,6 +66,16 @@
           <span id="countdownSeconds">30s</span>
         </div>
 
+        <!-- Refresh Amazon Images Button -->
+        <button id="btnRefreshImages" class="btn-secondary-glass" title="Refresh all product images from Amazon">
+          <svg id="refreshImagesIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+          <span>Refresh Images</span>
+        </button>
+
         <!-- Sync Latest Data Button -->
         <button id="btnSyncNow" class="btn-primary-glass" title="Fetch fresh data from Google Sheet without cache (R)">
           <svg id="syncIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
@@ -102,19 +112,19 @@
       </div>
 
       <div class="filter-right-group">
-        <label class="toggle-hide-switch" title="You can now hide &quot;slots over&quot; products from here" aria-label="Hide slots over products">
-          <input type="checkbox" id="hideSlotsOverCheckbox">
+        <label class="toggle-hide-switch" title="Slots over (≤ 0) are hidden by default — click toggle to show them" aria-label="Show slots over products">
+          <input type="checkbox" id="showSlotsOverCheckbox">
           <span class="switch-track">
             <span class="switch-thumb"></span>
           </span>
-          <span class="switch-label">Hide Slots Over</span>
+          <span class="switch-label">Show Slots Over</span>
           <span class="switch-tooltip-trigger" aria-hidden="true">
             <svg class="tooltip-info-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10"></circle>
               <line x1="12" y1="16" x2="12" y2="12"></line>
               <line x1="12" y1="8" x2="12.01" y2="8"></line>
             </svg>
-            <span class="switch-tooltip-bubble" id="hideSlotsTooltip" role="tooltip">You can now hide "slots over" products from here</span>
+            <span class="switch-tooltip-bubble" id="hideSlotsTooltip" role="tooltip">Slots over (≤ 0) are hidden by default — click to show</span>
           </span>
         </label>
         <div class="filter-meta">

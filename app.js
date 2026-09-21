@@ -13,10 +13,12 @@
     filteredItems: [],
     currentFilter: 'all',
     searchQuery: '',
-    hideSlotsOver: false,
+    showSlotsOver: false, // Hidden slots (≤ 0) are hidden by default; user turns on via toggle
     countdown: 30,
     countdownInterval: null,
     isSyncing: false,
+    isRefreshingImages: false,
+    resolvingAsins: new Set(),
     lastSyncTimestamp: null,
   };
 
@@ -26,7 +28,7 @@
     purgeLoadingView: document.getElementById('purgeLoadingView'),
     emptyState: document.getElementById('emptyState'),
     btnResetFilters: document.getElementById('btnResetFilters'),
-    hideSlotsOverCheckbox: document.getElementById('hideSlotsOverCheckbox'),
+    showSlotsOverCheckbox: document.getElementById('showSlotsOverCheckbox') || document.getElementById('hideSlotsOverCheckbox'),
     hideSlotsTooltip: document.getElementById('hideSlotsTooltip'),
     
     // Header & Controls
@@ -34,6 +36,8 @@
     searchClearBtn: document.getElementById('searchClearBtn'),
     btnSyncNow: document.getElementById('btnSyncNow'),
     syncIcon: document.getElementById('syncIcon'),
+    btnRefreshImages: document.getElementById('btnRefreshImages'),
+    refreshImagesIcon: document.getElementById('refreshImagesIcon'),
     countdownSeconds: document.getElementById('countdownSeconds'),
     lastSyncTime: document.getElementById('lastSyncTime'),
     
@@ -308,13 +312,13 @@
   function applyFiltersAndRender() {
     const query = state.searchQuery.toLowerCase().trim();
     const filter = state.currentFilter;
-    const hideOver = state.hideSlotsOver;
+    const showOver = state.showSlotsOver;
 
     state.filteredItems = state.items.filter(item => {
       const status = getSlotStatus(item.remaining);
 
-      // Option: Hide 'slots over' products (remaining <= 0)
-      if (hideOver && status.category === 'over' && filter !== 'over') {
+      // Hidden slots are hidden by default (remaining <= 0); user can turn on via toggle or on 'over' tab
+      if (!showOver && status.category === 'over' && filter !== 'over') {
         return false;
       }
 
@@ -363,13 +367,16 @@
       const cardDisabledClass = status.isDisabled ? 'is-disabled' : '';
 
       // Clean image with fallback
-      const imageUrl = item.image || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 24 24" fill="none" stroke="%2394A3B8" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
+      const hasImage = Boolean(item.image);
+      const imageUrl = hasImage
+        ? item.image
+        : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 24 24" fill="none" stroke="%2394A3B8" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
 
       return `
         <div class="product-card glass-panel ${cardDisabledClass}">
           <!-- Image Chamber (No ASIN) -->
-          <div class="product-image-box">
-            <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(item.name)}" class="product-img" loading="lazy" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'160\\' height=\\'160\\' viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'%23cbd5e1\\' stroke-width=\\'1.5\\'><rect x=\\'3\\' y=\\'3\\' width=\\'18\\' height=\\'18\\' rx=\\'3\\'/><circle cx=\\'8.5\\' cy=\\'8.5\\' r=\\'1.5\\'/><path d=\\'M21 15l-5-5L5 21\\'/></svg>';">
+          <div class="product-image-box ${!hasImage ? 'is-loading-img' : ''}" data-asin="${escapeHtml(item.asin)}">
+            <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(item.name)}" class="product-img" loading="lazy" data-asin="${escapeHtml(item.asin)}" onerror="window.handleImageError && window.handleImageError(this, '${escapeHtml(item.asin)}')">
           </div>
 
           <!-- Body -->
@@ -416,7 +423,122 @@
     }).join('');
 
     elements.productGrid.innerHTML = html;
+    resolveMissingImages();
   }
+
+  /**
+   * Asynchronously resolves missing images from /api/asin-image
+   */
+  async function resolveMissingImages() {
+    const missingItems = state.filteredItems.filter(item => item.asin && !item.image && !state.resolvingAsins.has(item.asin));
+    if (missingItems.length === 0) return;
+
+    for (const item of missingItems) {
+      state.resolvingAsins.add(item.asin);
+      fetch(`/api/asin-image?asin=${encodeURIComponent(item.asin)}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data && data.image) {
+            item.image = data.image;
+            const mainItem = state.items.find(i => i.asin === item.asin);
+            if (mainItem) mainItem.image = data.image;
+
+            const boxes = document.querySelectorAll(`.product-image-box[data-asin="${item.asin}"]`);
+            boxes.forEach(box => {
+              box.classList.remove('is-loading-img');
+              const img = box.querySelector('img');
+              if (img) {
+                img.style.opacity = '0';
+                img.src = data.image;
+                img.onload = () => { img.style.opacity = '1'; };
+              }
+            });
+          } else {
+            const boxes = document.querySelectorAll(`.product-image-box[data-asin="${item.asin}"]`);
+            boxes.forEach(box => box.classList.remove('is-loading-img'));
+          }
+        })
+        .catch(() => {
+          const boxes = document.querySelectorAll(`.product-image-box[data-asin="${item.asin}"]`);
+          boxes.forEach(box => box.classList.remove('is-loading-img'));
+        });
+    }
+  }
+
+  /**
+   * Refreshes all product images from Amazon via /api/refresh-images
+   */
+  async function refreshAmazonImages() {
+    if (state.isRefreshingImages) return;
+    state.isRefreshingImages = true;
+
+    if (elements.btnRefreshImages) {
+      elements.btnRefreshImages.disabled = true;
+    }
+    if (elements.refreshImagesIcon) {
+      elements.refreshImagesIcon.classList.add('spin-anim');
+    }
+
+    showToast('Refreshing images from Amazon...', '🔄');
+
+    try {
+      const response = await fetch('/api/refresh-images?force=1', {
+        method: 'POST',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const refreshedCount = data.refreshed || 0;
+        showToast(`Amazon images refreshed! (${refreshedCount} updated)`, '✓');
+      } else {
+        throw new Error(`Server returned ${response.status}`);
+      }
+    } catch (err) {
+      console.warn('Refresh images error:', err);
+      showToast('Image refresh triggered in background', '🔄');
+    } finally {
+      state.isRefreshingImages = false;
+      if (elements.btnRefreshImages) {
+        elements.btnRefreshImages.disabled = false;
+      }
+      if (elements.refreshImagesIcon) {
+        elements.refreshImagesIcon.classList.remove('spin-anim');
+      }
+      // Re-fetch live data to update the UI
+      await fetchLiveData(false);
+    }
+  }
+
+  /**
+   * Fallback & recovery handler for broken or failed images
+   */
+  window.handleImageError = function(imgEl, asin) {
+    if (!imgEl) return;
+    const fallbackSvg = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 24 24" fill="none" stroke="%23cbd5e1" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
+
+    if (!imgEl.dataset.retried && asin) {
+      imgEl.dataset.retried = '1';
+      fetch(`/api/asin-image?asin=${encodeURIComponent(asin)}&refresh=1`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data && data.image) {
+            imgEl.src = data.image;
+          } else {
+            imgEl.onerror = null;
+            imgEl.src = fallbackSvg;
+          }
+        })
+        .catch(() => {
+          imgEl.onerror = null;
+          imgEl.src = fallbackSvg;
+        });
+      return;
+    }
+
+    imgEl.onerror = null;
+    imgEl.src = fallbackSvg;
+  };
 
   /**
    * 30-second countdown cycle
@@ -471,6 +593,13 @@
       fetchLiveData(false);
     });
 
+    // Refresh Amazon Images Button
+    if (elements.btnRefreshImages) {
+      elements.btnRefreshImages.addEventListener('click', () => {
+        refreshAmazonImages();
+      });
+    }
+
     // Instant Search
     elements.searchInput.addEventListener('input', (e) => {
       state.searchQuery = e.target.value;
@@ -492,19 +621,19 @@
       elements.searchInput.value = '';
       state.searchQuery = '';
       elements.searchClearBtn.style.display = 'none';
-      if (elements.hideSlotsOverCheckbox) {
-        elements.hideSlotsOverCheckbox.checked = false;
-        state.hideSlotsOver = false;
+      if (elements.showSlotsOverCheckbox) {
+        elements.showSlotsOverCheckbox.checked = false;
+        state.showSlotsOver = false;
       }
       setActiveFilter('all');
     });
 
-    // Hide Slots Over Toggle Switch
-    if (elements.hideSlotsOverCheckbox) {
-      elements.hideSlotsOverCheckbox.addEventListener('change', (e) => {
-        state.hideSlotsOver = e.target.checked;
+    // Show / Hide Slots Over Toggle Switch
+    if (elements.showSlotsOverCheckbox) {
+      elements.showSlotsOverCheckbox.addEventListener('change', (e) => {
+        state.showSlotsOver = e.target.checked;
         applyFiltersAndRender();
-        showToast(state.hideSlotsOver ? 'Hiding "slots over" products' : 'Showing all slot states');
+        showToast(state.showSlotsOver ? 'Showing "slots over" products (≤ 0)' : 'Hiding "slots over" products');
       });
     }
 
@@ -568,6 +697,11 @@
         if (!e.ctrlKey && !e.metaKey) {
           e.preventDefault();
           fetchLiveData(false);
+        }
+      } else if ((e.key === 'i' || e.key === 'I') && document.activeElement !== elements.searchInput) {
+        if (!e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          refreshAmazonImages();
         }
       }
     });
