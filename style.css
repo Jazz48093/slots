@@ -911,6 +911,28 @@ body {
   padding-top: 4px;
 }
 
+/* When Less % Tag is omitted (e.g. on uc104 root URL) */
+.card-bottom-row.no-less-tag {
+  justify-content: flex-end;
+}
+
+.card-bottom-row.no-less-tag .card-action-btns {
+  width: 100%;
+  display: flex;
+}
+
+.card-bottom-row.no-less-tag .btn-product-link-small {
+  flex: 1;
+  text-align: center;
+  justify-content: center;
+}
+
+.card-bottom-row.no-less-tag .btn-product-link-small.is-disabled {
+  width: 100%;
+  text-align: center;
+  justify-content: center;
+}
+
 /* Compact Less % Tag Pill */
 .card-less-tag {
   display: inline-flex;

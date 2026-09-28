@@ -307,12 +307,29 @@
   }
 
   /**
+   * Determine whether the current view should hide the Less % discount tag.
+   * True if window.HIDE_LESS is set, or if on root URL (/ or /index.html) of uc104.vercel.app,
+   * while preserving Less % on /dhruv and /med pages.
+   */
+  function isNoLessPage() {
+    if (typeof window.HIDE_LESS !== 'undefined') {
+      return Boolean(window.HIDE_LESS);
+    }
+    const path = (window.location.pathname || '').toLowerCase();
+    if (path.includes('/dhruv') || path.includes('/med')) {
+      return false;
+    }
+    return path === '/' || path === '/index.html' || path === '' || window.location.search.includes('no_less');
+  }
+
+  /**
    * Filter items by tab category & instant search query
    */
   function applyFiltersAndRender() {
     const query = state.searchQuery.toLowerCase().trim();
     const filter = state.currentFilter;
     const showOver = state.showSlotsOver;
+    const noLess = isNoLessPage();
 
     state.filteredItems = state.items.filter(item => {
       const status = getSlotStatus(item.remaining);
@@ -331,7 +348,7 @@
       if (query) {
         const nameMatch = (item.name || '').toLowerCase().includes(query);
         const asinMatch = (item.asin || '').toLowerCase().includes(query);
-        const lessMatch = (item.less || '').toLowerCase().includes(query);
+        const lessMatch = !noLess && (item.less || '').toLowerCase().includes(query);
         return nameMatch || asinMatch || lessMatch;
       }
 
@@ -362,6 +379,7 @@
    * Render 6-column Product Showcase Grid
    */
   function renderGrid() {
+    const noLess = isNoLessPage();
     const html = state.filteredItems.map(item => {
       const status = getSlotStatus(item.remaining);
       const cardDisabledClass = status.isDisabled ? 'is-disabled' : '';
@@ -389,11 +407,13 @@
             </div>
 
             <!-- Combined Bottom Row: Less % Tag + View Link & Copy Icon -->
-            <div class="card-bottom-row">
-              <div class="card-less-tag" title="Discount / Less percentage">
-                <span class="card-less-label">Less</span>
-                <span class="card-less-val">${escapeHtml(item.less || '-')}</span>
-              </div>
+            <div class="card-bottom-row ${noLess ? 'no-less-tag' : ''}">
+              ${!noLess ? `
+                <div class="card-less-tag" title="Discount / Less percentage">
+                  <span class="card-less-label">Less</span>
+                  <span class="card-less-val">${escapeHtml(item.less || '-')}</span>
+                </div>
+              ` : ''}
 
               ${item.link && !status.isDisabled ? `
                 <div class="card-action-btns">
