@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>UC 104 pending slots</title>
-  <meta name="description" content="Executive live dashboard for UC 104 pending slots, tracking target orders and remaining slots directly from Google Sheets.">
+  <title>Slots Live Counter</title>
+  <meta name="description" content="Multi-brand live dashboard for tracking order targets, fulfilled quantities, and remaining slots directly from Google Sheets.">
   
   <!-- Modern Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -26,20 +26,21 @@
         <div class="brand-badge">
           <div class="brand-icon">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
-              <line x1="3" y1="6" x2="21" y2="6"></line>
-              <path d="M16 10a4 4 0 0 1-8 0"></path>
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
             </svg>
           </div>
           <div class="brand-titles">
             <div class="title-row">
-              <h1 class="page-title">UC 104 pending slots</h1>
-              <span class="live-pill" id="livePill" title="Direct live stream from Google Sheets Tab 104">
+              <h1 class="page-title">Slots Live Counter</h1>
+              <span class="live-pill" id="livePill" title="Direct live stream from Google Sheets Tab: Slots - All Brands">
                 <span class="pulse-dot"></span>
                 <span class="live-text">Live Sync</span>
               </span>
             </div>
-            <p class="page-subtitle">Real-time Order Targets &amp; Remaining Slots</p>
+            <p class="page-subtitle">Multi-Brand Order Targets &amp; Remaining Slots</p>
           </div>
         </div>
       </div>
@@ -51,7 +52,7 @@
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
-          <input type="text" id="searchInput" placeholder="Search SKU, ASIN..." autocomplete="off" spellcheck="false">
+          <input type="text" id="searchInput" placeholder="Search Brand, SKU, ASIN..." autocomplete="off" spellcheck="false">
           <button id="searchClearBtn" class="search-clear-btn" aria-label="Clear search" title="Clear (Esc)">&times;</button>
           <span class="search-hint">/</span>
         </div>
@@ -84,6 +85,96 @@
         </button>
       </div>
     </header>
+
+    <!-- Executive KPI Row -->
+    <section class="kpi-row" aria-label="Executive KPI Summary">
+      <div class="kpi-card glass-panel">
+        <div class="kpi-icon-wrap icon-purple">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+            <line x1="7" y1="7" x2="7.01" y2="7"></line>
+          </svg>
+        </div>
+        <div class="kpi-content">
+          <span class="kpi-label">Active Brands</span>
+          <div class="kpi-val-row">
+            <span class="kpi-value" id="kpiTotalBrands">0</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="kpi-card glass-panel">
+        <div class="kpi-icon-wrap icon-indigo">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+          </svg>
+        </div>
+        <div class="kpi-content">
+          <span class="kpi-label">Total SKUs</span>
+          <div class="kpi-val-row">
+            <span class="kpi-value" id="kpiTotalSkus">0</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="kpi-card glass-panel">
+        <div class="kpi-icon-wrap icon-azure">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <circle cx="12" cy="12" r="6"></circle>
+            <circle cx="12" cy="12" r="2"></circle>
+          </svg>
+        </div>
+        <div class="kpi-content">
+          <span class="kpi-label">Target Units</span>
+          <div class="kpi-val-row">
+            <span class="kpi-value" id="kpiTotalTarget">0</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="kpi-card glass-panel">
+        <div class="kpi-icon-wrap icon-emerald">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+        </div>
+        <div class="kpi-content">
+          <span class="kpi-label">Ordered / Done</span>
+          <div class="kpi-val-row">
+            <span class="kpi-value" id="kpiTotalDone">0</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="kpi-card glass-panel">
+        <div class="kpi-icon-wrap icon-amber">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+          </svg>
+        </div>
+        <div class="kpi-content">
+          <span class="kpi-label">Slots Remaining</span>
+          <div class="kpi-val-row">
+            <span class="kpi-value" id="kpiTotalRemaining">0</span>
+            <span class="kpi-badge success" id="kpiPercent">0%</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Multi-Brand Chip Selector -->
+    <div class="brand-filter-bar" id="brandFilterBar" aria-label="Filter by Brand">
+      <span class="brand-filter-label">Brand:</span>
+      <button class="brand-chip-btn active" data-brand="all" id="btnBrandAll">
+        <span>All Brands</span>
+        <span class="chip-count" id="countBrandAll">0</span>
+      </button>
+      <!-- Individual brand buttons injected dynamically by app.js -->
+      <div id="dynamicBrandChips" style="display: inline-flex; gap: 8px;"></div>
+    </div>
 
     <!-- Filter Segment Tabs Bar -->
     <nav class="filter-bar glass-panel" aria-label="Filter products">
@@ -138,13 +229,15 @@
         <div class="spinner-ring"></div>
         <div class="purge-text-group">
           <h3>Syncing with Live Google Sheet...</h3>
-          <p>Purging existing cached items &amp; loading fresh counts directly from Tab 104.</p>
+          <p>Purging existing cached items &amp; loading fresh counts directly from "Slots - All Brands".</p>
         </div>
       </div>
 
-      <!-- 6-Column Product Card Grid -->
-      <div class="product-grid" id="productGrid" aria-label="Product Showcase Grid">
-        <!-- Rendered dynamically by app.js -->
+      <!-- Main Products View (supports grouped brand sections or unified grid) -->
+      <div id="productGridContainer">
+        <div class="product-grid" id="productGrid" aria-label="Product Showcase Grid">
+          <!-- Rendered dynamically by app.js -->
+        </div>
       </div>
 
       <!-- Empty State -->
@@ -157,7 +250,7 @@
           </svg>
         </div>
         <h3>No matching products found</h3>
-        <p>No products match your current search or filter criteria.</p>
+        <p>No products match your current brand, search, or status filter.</p>
         <button class="btn-secondary-glass" id="btnResetFilters">Reset Filters</button>
       </div>
     </main>
@@ -165,7 +258,7 @@
     <!-- Sleek Minimalist Footer -->
     <footer class="app-footer">
       <div class="footer-content">
-        <span>Connected to Google Sheet: <strong>Tab 104 Live Counter</strong></span>
+        <span>Connected to Google Sheet: <strong>Slots - All Brands</strong></span>
         <span>•</span>
         <span>Zero-Cache Live Proxy Architecture</span>
         <span>•</span>
@@ -177,11 +270,6 @@
   <!-- Toast Notification Container -->
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <!-- Explicit Flag to Hide Less % for Root URL (uc104.vercel.app) -->
-  <script>
-    window.DATA_COL = 'g';
-    window.HIDE_LESS = true;
-  </script>
   <script src="app.js"></script>
 </body>
 </html>

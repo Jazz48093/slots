@@ -19,7 +19,8 @@ from fetch_asin_images import (
 )
 
 PORT = 8088
-SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1EDMwxLBoYV_-4RXul07q4NiXGF6uxiDTaakn4Akhpoc/export?format=csv&gid=1705723818"
+SPREADSHEET_ID = "1EDMwxLBoYV_-4RXul07q4NiXGF6uxiDTaakn4Akhpoc"
+DEFAULT_GID = "823537914" # "Slots - All Brands"
 
 # Background worker lock to prevent overlapping sync threads
 _bg_fetch_lock = threading.Lock()
@@ -110,35 +111,47 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
 
     def handle_api_data(self, parsed):
-        # Cache busting request to Google Sheets
-        nocache_url = f"{SHEET_CSV_URL}&_nocache={time.time_ns()}"
-        req = urllib.request.Request(nocache_url, headers={
+        params = urllib.parse.parse_qs(parsed.query)
+        gid = params.get('gid', [DEFAULT_GID])[0]
+
+        # First try gviz endpoint (fast, direct, no redirect)
+        gviz_url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&gid={gid}&_nocache={time.time_ns()}"
+        req = urllib.request.Request(gviz_url, headers={
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache'
         })
 
+        csv_text = ""
         try:
             with urllib.request.urlopen(req, timeout=12) as resp:
                 csv_bytes = resp.read()
                 csv_text = csv_bytes.decode('utf-8', errors='ignore')
+        except Exception:
+            # Fallback to export format
+            export_url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&gid={gid}&_nocache={time.time_ns()}"
+            req2 = urllib.request.Request(export_url, headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache'
+            })
+            with urllib.request.urlopen(req2, timeout=12) as resp2:
+                csv_bytes = resp2.read()
+                csv_text = csv_bytes.decode('utf-8', errors='ignore')
 
-            # Parse query params
-            params = urllib.parse.parse_qs(parsed.query)
-            format_type = params.get('format', ['json'])[0]
-            col_param = params.get('col', ['g'])[0].lower()
-            is_med = col_param in ['i', 'med']
+        format_type = params.get('format', ['json'])[0]
+        if format_type == 'csv':
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/csv; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(csv_text.encode('utf-8'))
+            return
 
-            if format_type == 'csv':
-                self.send_response(200)
-                self.send_header('Content-Type', 'text/csv; charset=utf-8')
-                self.end_headers()
-                self.wfile.write(csv_bytes)
-                return
-
+        try:
             reader = list(csv.reader(io.StringIO(csv_text)))
             if not reader:
                 items = []
+                brands = []
             else:
                 header_row = [c.strip().lower() for c in reader[0]]
                 
@@ -149,16 +162,18 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
                                 return idx
                     return default_idx
 
-                name_idx = find_col(['sku', 'product', 'item'], 0)
-                asin_idx = find_col(['asin'], 1)
-                link_idx = find_col(['link', 'url'], 2)
-                qty_idx = find_col(['qty', 'quantity', 'target'], 3)
-                done_idx = find_col(['done', 'order'], 4)
-                rem_idx = find_col(['remaining', 'rem', 'left', 'slot'], 5)
-                less_idx = find_col(['med. less', 'med less', 'med'], 8) if is_med else find_col(['dhruv less', 'dhruv', 'less %', 'less'], 6)
+                brand_idx = find_col(['brand'], -1)
+                name_idx = find_col(['sku', 'product', 'item', 'name'], 1 if brand_idx == 0 else 0)
+                asin_idx = find_col(['asin'], 2)
+                link_idx = find_col(['link', 'url'], 3)
+                qty_idx = find_col(['qty', 'quantity', 'target'], 4)
+                done_idx = find_col(['done', 'order', 'placed'], 5)
+                rem_idx = find_col(['remaining', 'rem', 'left', 'slot', 'pending'], 6)
+                less_idx = find_col(['less', 'discount', '%'], -1)
 
                 asin_cache = load_asin_cache()
                 items = []
+                brand_set = set()
                 missing_asins = []
 
                 for r in reader[1:]:
@@ -166,8 +181,9 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
                         continue
                     
                     def get_val(idx):
-                        return r[idx].strip() if idx < len(r) else ''
+                        return r[idx].strip() if idx != -1 and idx < len(r) else ''
 
+                    brand = get_val(brand_idx) or 'General'
                     name = get_val(name_idx)
                     asin = get_val(asin_idx)
                     link = get_val(link_idx)
@@ -213,7 +229,11 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
                     if asin and not image:
                         missing_asins.append(asin)
 
+                    if brand:
+                        brand_set.add(brand)
+
                     items.append({
+                        "brand": brand,
                         "name": name,
                         "asin": asin,
                         "link": link,
@@ -228,10 +248,24 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
                 if missing_asins:
                     background_fetch_missing_asins(missing_asins)
 
+                brands = sorted(list(brand_set))
+
+            total_target = sum(item["qty"] for item in items)
+            total_done = sum(item["done"] for item in items)
+            total_remaining = sum(item["remaining"] for item in items)
+
             response_data = {
                 "status": "success",
                 "timestamp": int(time.time()),
                 "total": len(items),
+                "brands": brands,
+                "stats": {
+                    "totalBrands": len(brands),
+                    "totalSkus": len(items),
+                    "totalTarget": total_target,
+                    "totalDone": total_done,
+                    "totalRemaining": total_remaining
+                },
                 "items": items
             }
 
@@ -294,7 +328,7 @@ def run_server():
     for p in range(PORT, PORT + 10):
         try:
             with socketserver.TCPServer(("", p), LiveProxyHandler) as httpd:
-                print(f"🚀 Live 104 Dashboard Proxy running at: http://localhost:{p}")
+                print(f"🚀 Slots Live Counter Proxy running at: http://localhost:{p}")
                 httpd.serve_forever()
                 break
         except OSError:

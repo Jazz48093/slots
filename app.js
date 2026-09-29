@@ -1,7 +1,7 @@
 /**
- * UC 104 PENDING SLOTS - LIVE CLIENT APPLICATION
- * Zero-cache proxy architecture, instant state purging on refresh,
- * 5-column glass card grid & executive table view.
+ * SLOTS LIVE COUNTER - MULTI-BRAND APPLICATION
+ * Real-time order targets, fulfilled quantities, and remaining slots
+ * with Brand grouping, zero-cache live proxy, and instant state sync.
  */
 
 (function () {
@@ -10,7 +10,10 @@
   // Application State
   const state = {
     items: [],
+    brands: [],
+    stats: null,
     filteredItems: [],
+    currentBrand: 'all',
     currentFilter: 'all',
     searchQuery: '',
     showSlotsOver: false, // Hidden slots (≤ 0) are hidden by default; user turns on via toggle
@@ -24,11 +27,12 @@
 
   // DOM Elements
   const elements = {
+    productGridContainer: document.getElementById('productGridContainer'),
     productGrid: document.getElementById('productGrid'),
     purgeLoadingView: document.getElementById('purgeLoadingView'),
     emptyState: document.getElementById('emptyState'),
     btnResetFilters: document.getElementById('btnResetFilters'),
-    showSlotsOverCheckbox: document.getElementById('showSlotsOverCheckbox') || document.getElementById('hideSlotsOverCheckbox'),
+    showSlotsOverCheckbox: document.getElementById('showSlotsOverCheckbox'),
     hideSlotsTooltip: document.getElementById('hideSlotsTooltip'),
     
     // Header & Controls
@@ -41,20 +45,25 @@
     countdownSeconds: document.getElementById('countdownSeconds'),
     lastSyncTime: document.getElementById('lastSyncTime'),
     
+    // KPI Cards
+    kpiTotalBrands: document.getElementById('kpiTotalBrands'),
+    kpiTotalSkus: document.getElementById('kpiTotalSkus'),
+    kpiTotalTarget: document.getElementById('kpiTotalTarget'),
+    kpiTotalDone: document.getElementById('kpiTotalDone'),
+    kpiTotalRemaining: document.getElementById('kpiTotalRemaining'),
+    kpiPercent: document.getElementById('kpiPercent'),
+    
+    // Brand Chips
+    btnBrandAll: document.getElementById('btnBrandAll'),
+    countBrandAll: document.getElementById('countBrandAll'),
+    dynamicBrandChips: document.getElementById('dynamicBrandChips'),
+
     // Filter Tabs
     filterTabs: document.querySelectorAll('.filter-tab'),
     countAll: document.getElementById('countAll'),
     countAvailable: document.getElementById('countAvailable'),
     countLow: document.getElementById('countLow'),
     countOver: document.getElementById('countOver'),
-    
-    // KPI Cards
-    kpiTotalSkus: document.getElementById('kpiTotalSkus'),
-    kpiTotalTarget: document.getElementById('kpiTotalTarget'),
-    kpiTotalDone: document.getElementById('kpiTotalDone'),
-    kpiTotalRemaining: document.getElementById('kpiTotalRemaining'),
-    kpiActiveDiscounts: document.getElementById('kpiActiveDiscounts'),
-    kpiPercent: document.getElementById('kpiPercent'),
     
     toastContainer: document.getElementById('toastContainer'),
   };
@@ -65,16 +74,16 @@
    *  - > 3: "3+ slots left"
    *  - 3: "3 slots left"
    *  - 2: "2 slots left"
-   *  - 1: "1 order left"
+   *  - 1: "1 slot left"
    *  - 0: "No slots left"
    *  - < 0: "No slots left" (Product disabled & link disabled)
    */
   function getSlotStatus(remaining) {
     if (remaining > 3) {
       return {
-        label: '3+ slots left',
+        label: `${remaining} slots left`,
         badgeClass: 'slot-badge-available',
-        remClass: '',
+        remClass: 'val-green',
         isDisabled: false,
         category: 'available',
       };
@@ -82,7 +91,7 @@
       return {
         label: '3 slots left',
         badgeClass: 'slot-badge-three',
-        remClass: 'rem-val-low',
+        remClass: 'val-low',
         isDisabled: false,
         category: 'low',
       };
@@ -90,7 +99,7 @@
       return {
         label: '2 slots left',
         badgeClass: 'slot-badge-low',
-        remClass: 'rem-val-low',
+        remClass: 'val-low',
         isDisabled: false,
         category: 'low',
       };
@@ -98,7 +107,7 @@
       return {
         label: '1 slot left',
         badgeClass: 'slot-badge-low',
-        remClass: 'rem-val-low',
+        remClass: 'val-low',
         isDisabled: false,
         category: 'low',
       };
@@ -106,7 +115,7 @@
       return {
         label: 'No slots left',
         badgeClass: 'slot-badge-zero',
-        remClass: '',
+        remClass: 'val-zero',
         isDisabled: true,
         category: 'over',
       };
@@ -115,7 +124,7 @@
       return {
         label: 'No slots left',
         badgeClass: 'slot-badge-disabled',
-        remClass: 'rem-val-negative',
+        remClass: 'val-zero',
         isDisabled: true,
         category: 'over',
       };
@@ -123,479 +132,10 @@
   }
 
   /**
-   * Shows a sleek temporary toast notification
+   * Escape HTML utility to prevent XSS injection
    */
-  function showToast(message, icon = '✓') {
-    if (!elements.toastContainer) return;
-    const toast = document.createElement('div');
-    toast.className = 'toast-msg';
-    toast.innerHTML = `<span>${icon}</span><span>${message}</span>`;
-    elements.toastContainer.appendChild(toast);
-    setTimeout(() => {
-      toast.style.transition = 'opacity 300ms ease, transform 300ms ease';
-      toast.style.opacity = '0';
-      toast.style.transform = 'translateY(10px)';
-      setTimeout(() => toast.remove(), 300);
-    }, 2800);
-  }
-
-  /**
-   * Purges all existing data from state & DOM
-   */
-  function purgeExistingData() {
-    state.items = [];
-    state.filteredItems = [];
-    elements.productGrid.innerHTML = '';
-    elements.purgeLoadingView.classList.add('active');
-    elements.emptyState.style.display = 'none';
-    if (elements.syncIcon) {
-      elements.syncIcon.classList.add('spin-anim');
-    }
-  }
-
-  /**
-   * Main fetch method: Queries /api/data with cache-busting timestamp,
-   * falling back directly to Google Sheets CSV export if needed.
-   */
-  async function fetchLiveData(isAutoRefresh = false) {
-    if (state.isSyncing) return;
-    state.isSyncing = true;
-    
-    // Purge existing data before loading fresh data
-    purgeExistingData();
-
-    const timestamp = Date.now();
-    const isMed = window.DATA_COL === 'i' || window.location.pathname.includes('/med') || window.location.search.includes('col=i') || window.location.search.includes('col=med');
-    const colQuery = isMed ? '&col=i' : '&col=g';
-    let loadedItems = [];
-
-    try {
-      // 1. Try Zero-Cache Proxy Endpoint
-      const response = await fetch(`/api/data?_nocache=${timestamp}${colQuery}`, {
-        cache: 'no-store',
-        headers: {
-          'Pragma': 'no-cache',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data && data.items) {
-          loadedItems = data.items;
-        }
-      } else {
-        throw new Error(`Server proxy error: ${response.status}`);
-      }
-    } catch (err) {
-      console.warn('Proxy request failed, falling back to direct sheet fetch:', err);
-      // 2. Direct Fallback to Google Sheets CSV export
-      try {
-        const directUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vRqiAXWRcgtm3Au4vvNJqdY427P0dqyf0nuF_Z7xoaKWOYgN4ESKPdUFM1UzPYJRYealThYL6M0z0ll/pub?gid=1705723818&single=true&output=csv&_nocache=${timestamp}`;
-        const fallbackResp = await fetch(directUrl, { cache: 'no-store' });
-        if (fallbackResp.ok) {
-          const csvText = await fallbackResp.text();
-          loadedItems = parseCsvFallback(csvText);
-        }
-      } catch (fbErr) {
-        console.error('All fetch methods failed:', fbErr);
-        showToast('Error syncing data. Retrying...', '⚠️');
-      }
-    } finally {
-      state.isSyncing = false;
-      elements.purgeLoadingView.classList.remove('active');
-      if (elements.syncIcon) {
-        elements.syncIcon.classList.remove('spin-anim');
-      }
-
-      state.items = loadedItems;
-      state.lastSyncTimestamp = new Date();
-      updateLastSyncText();
-      
-      // Update KPIs, filters and render views
-      calculateKpis();
-      applyFiltersAndRender();
-      resetCountdown();
-
-      if (!isAutoRefresh) {
-        showToast(`Refreshed ${state.items.length} items live from sheet!`);
-      }
-    }
-  }
-
-  /**
-   * Fallback CSV parser for direct sheet fetches
-   */
-  function parseCsvFallback(csvText) {
-    const lines = csvText.split(/\r?\n/).filter(line => line.trim());
-    if (lines.length <= 1) return [];
-
-    const items = [];
-    for (let i = 1; i < lines.length; i++) {
-      // Basic CSV field parser supporting quotes
-      const row = parseCsvRow(lines[i]);
-      if (!row || row.length < 2) continue;
-
-      const name = (row[0] || '').trim();
-      const asin = (row[1] || '').trim();
-      const link = (row[2] || '').trim();
-      const qty = parseInt(row[3], 10) || 0;
-      const done = parseInt(row[4], 10) || 0;
-      const remaining = parseInt(row[5], 10) || 0;
-      const isMed = window.DATA_COL === 'i' || window.location.pathname.includes('/med') || window.location.search.includes('col=i') || window.location.search.includes('col=med');
-      const lessColIdx = isMed ? 8 : 6;
-      const lessRaw = (row[lessColIdx] || '').trim();
-      
-      const less = (!lessRaw || lessRaw === '--' || lessRaw === '-' || lessRaw === '0%') ? '-' : lessRaw;
-
-      if (!name && !asin) continue;
-
-      items.push({
-        name,
-        asin,
-        link,
-        qty,
-        done,
-        remaining,
-        less,
-        image: ''
-      });
-    }
-    return items;
-  }
-
-  function parseCsvRow(text) {
-    const p = [];
-    let cur = '';
-    let inQuotes = false;
-    for (let i = 0; i < text.length; i++) {
-      const c = text[i];
-      if (c === '"') {
-        inQuotes = !inQuotes;
-      } else if (c === ',' && !inQuotes) {
-        p.push(cur);
-        cur = '';
-      } else {
-        cur += c;
-      }
-    }
-    p.push(cur);
-    return p.map(s => s.replace(/^"|"$/g, '').trim());
-  }
-
-  /**
-   * Calculate executive KPIs across current dataset
-   */
-  function calculateKpis() {
-    const totalSkus = state.items.length;
-    let availableCount = 0;
-    let lowCount = 0;
-    let overCount = 0;
-
-    state.items.forEach(item => {
-      const status = getSlotStatus(item.remaining);
-      if (status.category === 'available') availableCount++;
-      else if (status.category === 'low') lowCount++;
-      else if (status.category === 'over') overCount++;
-    });
-
-    // Update tab counts
-    if (elements.countAll) elements.countAll.textContent = totalSkus;
-    if (elements.countAvailable) elements.countAvailable.textContent = availableCount;
-    if (elements.countLow) elements.countLow.textContent = lowCount;
-    if (elements.countOver) elements.countOver.textContent = overCount;
-  }
-
-  /**
-   * Determine whether the current view should hide the Less % discount tag.
-   * True if window.HIDE_LESS is set, or if on root URL (/ or /index.html) of uc104.vercel.app,
-   * while preserving Less % on /dhruv and /med pages.
-   */
-  function isNoLessPage() {
-    if (typeof window.HIDE_LESS !== 'undefined') {
-      return Boolean(window.HIDE_LESS);
-    }
-    const path = (window.location.pathname || '').toLowerCase();
-    if (path.includes('/dhruv') || path.includes('/med')) {
-      return false;
-    }
-    return path === '/' || path === '/index.html' || path === '' || window.location.search.includes('no_less');
-  }
-
-  /**
-   * Filter items by tab category & instant search query
-   */
-  function applyFiltersAndRender() {
-    const query = state.searchQuery.toLowerCase().trim();
-    const filter = state.currentFilter;
-    const showOver = state.showSlotsOver;
-    const noLess = isNoLessPage();
-
-    state.filteredItems = state.items.filter(item => {
-      const status = getSlotStatus(item.remaining);
-
-      // Hidden slots are hidden by default (remaining <= 0); user can turn on via toggle or on 'over' tab
-      if (!showOver && status.category === 'over' && filter !== 'over') {
-        return false;
-      }
-
-      // Tab Category filter
-      if (filter === 'available' && status.category !== 'available') return false;
-      if (filter === 'low' && status.category !== 'low') return false;
-      if (filter === 'over' && status.category !== 'over') return false;
-
-      // Text search filter
-      if (query) {
-        const nameMatch = (item.name || '').toLowerCase().includes(query);
-        const asinMatch = (item.asin || '').toLowerCase().includes(query);
-        const lessMatch = !noLess && (item.less || '').toLowerCase().includes(query);
-        return nameMatch || asinMatch || lessMatch;
-      }
-
-      return true;
-    });
-
-    renderCurrentView();
-  }
-
-  /**
-   * Render either the 6-column Card Grid or the Executive Table
-   */
-  function renderCurrentView() {
-    const count = state.filteredItems.length;
-
-    if (count === 0) {
-      elements.productGrid.style.display = 'none';
-      elements.emptyState.style.display = 'flex';
-      return;
-    }
-
-    elements.emptyState.style.display = 'none';
-    elements.productGrid.style.display = 'grid';
-    renderGrid();
-  }
-
-  /**
-   * Render 6-column Product Showcase Grid
-   */
-  function renderGrid() {
-    const noLess = isNoLessPage();
-    const html = state.filteredItems.map(item => {
-      const status = getSlotStatus(item.remaining);
-      const cardDisabledClass = status.isDisabled ? 'is-disabled' : '';
-
-      // Clean image with fallback
-      const hasImage = Boolean(item.image);
-      const imageUrl = hasImage
-        ? item.image
-        : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 24 24" fill="none" stroke="%2394A3B8" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
-
-      return `
-        <div class="product-card glass-panel ${cardDisabledClass}">
-          <!-- Image Chamber (No ASIN) -->
-          <div class="product-image-box ${!hasImage ? 'is-loading-img' : ''}" data-asin="${escapeHtml(item.asin)}">
-            <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(item.name)}" class="product-img" loading="lazy" data-asin="${escapeHtml(item.asin)}" onerror="window.handleImageError && window.handleImageError(this, '${escapeHtml(item.asin)}')">
-          </div>
-
-          <!-- Body -->
-          <div class="card-body">
-            <h3 class="product-title" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</h3>
-
-            <!-- Slot Status Badge -->
-            <div class="slot-badge ${status.badgeClass}">
-              <span>${status.label}</span>
-            </div>
-
-            <!-- Combined Bottom Row: Less % Tag + View Link & Copy Icon -->
-            <div class="card-bottom-row ${noLess ? 'no-less-tag' : ''}">
-              ${!noLess ? `
-                <div class="card-less-tag" title="Discount / Less percentage">
-                  <span class="card-less-label">Less</span>
-                  <span class="card-less-val">${escapeHtml(item.less || '-')}</span>
-                </div>
-              ` : ''}
-
-              ${item.link && !status.isDisabled ? `
-                <div class="card-action-btns">
-                  <a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer" class="btn-product-link-small" title="Open product listing on Amazon">
-                    <span>View Link</span>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                  </a>
-                  <button class="btn-copy-link-small" data-link="${escapeHtml(item.link)}" title="Copy link to clipboard" aria-label="Copy link to clipboard">
-                    <svg class="copy-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                    </svg>
-                    <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
-                      <polyline points="20 6 9 17 4 12"></polyline>
-                    </svg>
-                  </button>
-                </div>
-              ` : `
-                <button class="btn-product-link-small is-disabled" disabled title="Slots are over or inactive">
-                  <span>⛔ Slot Over</span>
-                </button>
-              `}
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    elements.productGrid.innerHTML = html;
-    resolveMissingImages();
-  }
-
-  /**
-   * Asynchronously resolves missing images from /api/asin-image
-   */
-  async function resolveMissingImages() {
-    const missingItems = state.filteredItems.filter(item => item.asin && !item.image && !state.resolvingAsins.has(item.asin));
-    if (missingItems.length === 0) return;
-
-    for (const item of missingItems) {
-      state.resolvingAsins.add(item.asin);
-      fetch(`/api/asin-image?asin=${encodeURIComponent(item.asin)}`)
-        .then(res => res.ok ? res.json() : null)
-        .then(data => {
-          if (data && data.image) {
-            item.image = data.image;
-            const mainItem = state.items.find(i => i.asin === item.asin);
-            if (mainItem) mainItem.image = data.image;
-
-            const boxes = document.querySelectorAll(`.product-image-box[data-asin="${item.asin}"]`);
-            boxes.forEach(box => {
-              box.classList.remove('is-loading-img');
-              const img = box.querySelector('img');
-              if (img) {
-                img.style.opacity = '0';
-                img.src = data.image;
-                img.onload = () => { img.style.opacity = '1'; };
-              }
-            });
-          } else {
-            const boxes = document.querySelectorAll(`.product-image-box[data-asin="${item.asin}"]`);
-            boxes.forEach(box => box.classList.remove('is-loading-img'));
-          }
-        })
-        .catch(() => {
-          const boxes = document.querySelectorAll(`.product-image-box[data-asin="${item.asin}"]`);
-          boxes.forEach(box => box.classList.remove('is-loading-img'));
-        });
-    }
-  }
-
-  /**
-   * Refreshes all product images from Amazon via /api/refresh-images
-   */
-  async function refreshAmazonImages() {
-    if (state.isRefreshingImages) return;
-    state.isRefreshingImages = true;
-
-    if (elements.btnRefreshImages) {
-      elements.btnRefreshImages.disabled = true;
-    }
-    if (elements.refreshImagesIcon) {
-      elements.refreshImagesIcon.classList.add('spin-anim');
-    }
-
-    showToast('Refreshing images from Amazon...', '🔄');
-
-    try {
-      const response = await fetch('/api/refresh-images?force=1', {
-        method: 'POST',
-        headers: { 'Cache-Control': 'no-cache' }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const refreshedCount = data.refreshed || 0;
-        showToast(`Amazon images refreshed! (${refreshedCount} updated)`, '✓');
-      } else {
-        throw new Error(`Server returned ${response.status}`);
-      }
-    } catch (err) {
-      console.warn('Refresh images error:', err);
-      showToast('Image refresh triggered in background', '🔄');
-    } finally {
-      state.isRefreshingImages = false;
-      if (elements.btnRefreshImages) {
-        elements.btnRefreshImages.disabled = false;
-      }
-      if (elements.refreshImagesIcon) {
-        elements.refreshImagesIcon.classList.remove('spin-anim');
-      }
-      // Re-fetch live data to update the UI
-      await fetchLiveData(false);
-    }
-  }
-
-  /**
-   * Fallback & recovery handler for broken or failed images
-   */
-  window.handleImageError = function(imgEl, asin) {
-    if (!imgEl) return;
-    const fallbackSvg = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 24 24" fill="none" stroke="%23cbd5e1" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
-
-    if (!imgEl.dataset.retried && asin) {
-      imgEl.dataset.retried = '1';
-      fetch(`/api/asin-image?asin=${encodeURIComponent(asin)}&refresh=1`)
-        .then(res => res.ok ? res.json() : null)
-        .then(data => {
-          if (data && data.image) {
-            imgEl.src = data.image;
-          } else {
-            imgEl.onerror = null;
-            imgEl.src = fallbackSvg;
-          }
-        })
-        .catch(() => {
-          imgEl.onerror = null;
-          imgEl.src = fallbackSvg;
-        });
-      return;
-    }
-
-    imgEl.onerror = null;
-    imgEl.src = fallbackSvg;
-  };
-
-  /**
-   * 30-second countdown cycle
-   */
-  function resetCountdown() {
-    clearInterval(state.countdownInterval);
-    state.countdown = 30;
-    updateCountdownDisplay();
-
-    state.countdownInterval = setInterval(() => {
-      state.countdown--;
-      updateCountdownDisplay();
-
-      if (state.countdown <= 0) {
-        fetchLiveData(true);
-      }
-    }, 1000);
-  }
-
-  function updateCountdownDisplay() {
-    if (elements.countdownSeconds) {
-      elements.countdownSeconds.textContent = `${state.countdown}s`;
-    }
-  }
-
-  function updateLastSyncText() {
-    if (!elements.lastSyncTime) return;
-    if (!state.lastSyncTimestamp) {
-      elements.lastSyncTime.textContent = 'Connecting...';
-      return;
-    }
-    const timeStr = state.lastSyncTimestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    elements.lastSyncTime.textContent = `Last synced at ${timeStr}`;
-  }
-
   function escapeHtml(str) {
-    if (!str) return '';
+    if (!str && str !== 0) return '';
     return String(str)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -605,168 +145,602 @@
   }
 
   /**
-   * Event Handlers Setup
+   * Toast Notification Helper
    */
-  function setupEventListeners() {
-    // Manual Sync Button
-    elements.btnSyncNow.addEventListener('click', () => {
-      fetchLiveData(false);
-    });
+  function showToast(message, type = 'info') {
+    if (!elements.toastContainer) return;
+    const toast = document.createElement('div');
+    toast.className = `toast-msg toast-${type}`;
+    toast.innerHTML = `
+      <div class="toast-body">
+        <span>${escapeHtml(message)}</span>
+      </div>
+    `;
+    elements.toastContainer.appendChild(toast);
 
-    // Refresh Amazon Images Button
-    if (elements.btnRefreshImages) {
-      elements.btnRefreshImages.addEventListener('click', () => {
-        refreshAmazonImages();
-      });
+    setTimeout(() => {
+      toast.classList.add('toast-show');
+    }, 10);
+
+    setTimeout(() => {
+      toast.classList.remove('toast-show');
+      setTimeout(() => toast.remove(), 250);
+    }, 2800);
+  }
+
+  /**
+   * Fetch Live Data from Proxy API
+   */
+  async function fetchLiveData(isManual = false) {
+    if (state.isSyncing) return;
+    state.isSyncing = true;
+
+    if (elements.syncIcon) elements.syncIcon.classList.add('is-spinning');
+    if (elements.lastSyncTime) elements.lastSyncTime.textContent = 'Syncing...';
+
+    // Show purge animation on initial load or manual refresh
+    if (state.items.length === 0 || isManual) {
+      if (elements.purgeLoadingView) elements.purgeLoadingView.style.display = 'flex';
+      if (elements.productGridContainer) elements.productGridContainer.style.display = 'none';
+      if (elements.emptyState) elements.emptyState.style.display = 'none';
     }
 
-    // Instant Search
-    elements.searchInput.addEventListener('input', (e) => {
-      state.searchQuery = e.target.value;
-      elements.searchClearBtn.style.display = state.searchQuery ? 'flex' : 'none';
-      applyFiltersAndRender();
-    });
-
-    // Clear Search Button
-    elements.searchClearBtn.addEventListener('click', () => {
-      elements.searchInput.value = '';
-      state.searchQuery = '';
-      elements.searchClearBtn.style.display = 'none';
-      elements.searchInput.focus();
-      applyFiltersAndRender();
-    });
-
-    // Reset Filters from Empty State
-    elements.btnResetFilters.addEventListener('click', () => {
-      elements.searchInput.value = '';
-      state.searchQuery = '';
-      elements.searchClearBtn.style.display = 'none';
-      if (elements.showSlotsOverCheckbox) {
-        elements.showSlotsOverCheckbox.checked = false;
-        state.showSlotsOver = false;
-      }
-      setActiveFilter('all');
-    });
-
-    // Show / Hide Slots Over Toggle Switch
-    if (elements.showSlotsOverCheckbox) {
-      elements.showSlotsOverCheckbox.addEventListener('change', (e) => {
-        state.showSlotsOver = e.target.checked;
-        applyFiltersAndRender();
-        showToast(state.showSlotsOver ? 'Showing "slots over" products (≤ 0)' : 'Hiding "slots over" products');
+    try {
+      const url = `/api/data?_t=${Date.now()}`;
+      const res = await fetch(url, {
+        cache: 'no-store',
+        headers: { 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' }
       });
+
+      if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
+      const data = await res.json();
+
+      if (data.status === 'success') {
+        state.items = data.items || [];
+        state.brands = data.brands || [];
+        state.stats = data.stats || null;
+        state.lastSyncTimestamp = Date.now();
+
+        updateKpiMetrics();
+        renderBrandChips();
+        updateTabCounts();
+        applyFiltersAndRender();
+
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        if (elements.lastSyncTime) elements.lastSyncTime.textContent = `Synced: ${timeStr}`;
+
+        if (isManual) {
+          showToast(`✓ Synced ${state.items.length} items successfully!`, 'success');
+        }
+      } else {
+        throw new Error(data.message || 'API error');
+      }
+    } catch (err) {
+      console.error('Data fetch error:', err);
+      if (elements.lastSyncTime) elements.lastSyncTime.textContent = 'Sync Failed';
+      showToast(`Sync Failed: ${err.message}`, 'error');
+    } finally {
+      state.isSyncing = false;
+      if (elements.syncIcon) elements.syncIcon.classList.remove('is-spinning');
+      if (elements.purgeLoadingView) elements.purgeLoadingView.style.display = 'none';
+      if (elements.productGridContainer) elements.productGridContainer.style.display = 'block';
+      resetCountdown();
     }
+  }
 
-    // Filter Tabs
-    elements.filterTabs.forEach(tab => {
-      tab.addEventListener('click', () => {
-        const filter = tab.dataset.filter;
-        setActiveFilter(filter);
+  /**
+   * Update Executive KPI metrics
+   */
+  function updateKpiMetrics() {
+    const totalBrands = state.brands.length;
+    const totalSkus = state.items.length;
+    const totalTarget = state.items.reduce((acc, it) => acc + (it.qty || 0), 0);
+    const totalDone = state.items.reduce((acc, it) => acc + (it.done || 0), 0);
+    const totalRemaining = state.items.reduce((acc, it) => acc + (it.remaining || 0), 0);
+    const percentDone = totalTarget > 0 ? Math.round((totalDone / totalTarget) * 100) : 0;
+
+    if (elements.kpiTotalBrands) elements.kpiTotalBrands.textContent = totalBrands;
+    if (elements.kpiTotalSkus) elements.kpiTotalSkus.textContent = totalSkus;
+    if (elements.kpiTotalTarget) elements.kpiTotalTarget.textContent = totalTarget.toLocaleString();
+    if (elements.kpiTotalDone) elements.kpiTotalDone.textContent = totalDone.toLocaleString();
+    if (elements.kpiTotalRemaining) elements.kpiTotalRemaining.textContent = totalRemaining.toLocaleString();
+    if (elements.kpiPercent) elements.kpiPercent.textContent = `${percentDone}% Done`;
+  }
+
+  /**
+   * Render Multi-Brand Filter Chips
+   */
+  function renderBrandChips() {
+    if (elements.countBrandAll) elements.countBrandAll.textContent = state.items.length;
+    if (!elements.dynamicBrandChips) return;
+
+    const brandCounts = {};
+    state.items.forEach(it => {
+      const b = it.brand || 'General';
+      brandCounts[b] = (brandCounts[b] || 0) + 1;
+    });
+
+    const html = state.brands.map(brand => {
+      const count = brandCounts[brand] || 0;
+      const isActive = state.currentBrand === brand ? 'active' : '';
+      return `
+        <button class="brand-chip-btn ${isActive}" data-brand="${escapeHtml(brand)}">
+          <span>${escapeHtml(brand)}</span>
+          <span class="chip-count">${count}</span>
+        </button>
+      `;
+    }).join('');
+
+    elements.dynamicBrandChips.innerHTML = html;
+
+    // Attach click events
+    elements.dynamicBrandChips.querySelectorAll('.brand-chip-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const brand = btn.dataset.brand;
+        setBrandFilter(brand);
       });
-    });
-
-    // 1-Click Copy Link to Clipboard
-    elements.productGrid.addEventListener('click', async (e) => {
-      const copyBtn = e.target.closest('.btn-copy-link-small');
-      if (!copyBtn) return;
-
-      e.preventDefault();
-      e.stopPropagation();
-
-      const link = copyBtn.dataset.link;
-      if (!link) return;
-
-      try {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          await navigator.clipboard.writeText(link);
-        } else {
-          const textarea = document.createElement('textarea');
-          textarea.value = link;
-          textarea.style.position = 'fixed';
-          textarea.style.opacity = '0';
-          document.body.appendChild(textarea);
-          textarea.select();
-          document.execCommand('copy');
-          document.body.removeChild(textarea);
-        }
-
-        copyBtn.classList.add('copied');
-        showToast('Link copied to clipboard ✓', '📋');
-
-        setTimeout(() => {
-          copyBtn.classList.remove('copied');
-        }, 1500);
-      } catch (err) {
-        console.error('Copy link error:', err);
-        showToast('Unable to copy link', '⚠️');
-      }
-    });
-
-    // Global Keyboard Shortcuts
-    document.addEventListener('keydown', (e) => {
-      if (e.key === '/' && document.activeElement !== elements.searchInput) {
-        e.preventDefault();
-        elements.searchInput.focus();
-      } else if (e.key === 'Escape' && document.activeElement === elements.searchInput) {
-        elements.searchInput.value = '';
-        state.searchQuery = '';
-        elements.searchClearBtn.style.display = 'none';
-        elements.searchInput.blur();
-        applyFiltersAndRender();
-      } else if ((e.key === 'r' || e.key === 'R') && document.activeElement !== elements.searchInput) {
-        if (!e.ctrlKey && !e.metaKey) {
-          e.preventDefault();
-          fetchLiveData(false);
-        }
-      } else if ((e.key === 'i' || e.key === 'I') && document.activeElement !== elements.searchInput) {
-        if (!e.ctrlKey && !e.metaKey) {
-          e.preventDefault();
-          refreshAmazonImages();
-        }
-      }
     });
   }
 
-  function setActiveFilter(filter) {
-    state.currentFilter = filter;
-    elements.filterTabs.forEach(t => {
-      t.classList.toggle('active', t.dataset.filter === filter);
-    });
+  function setBrandFilter(brand) {
+    state.currentBrand = brand;
+    if (elements.btnBrandAll) {
+      elements.btnBrandAll.classList.toggle('active', brand === 'all');
+    }
+    if (elements.dynamicBrandChips) {
+      elements.dynamicBrandChips.querySelectorAll('.brand-chip-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.brand === brand);
+      });
+    }
     applyFiltersAndRender();
   }
 
   /**
-   * Automatically opens the "Hide slots over" tooltip after 3 seconds of loading
+   * Update Filter Tab Counts
    */
-  function setupTooltipOnboarding() {
-    setTimeout(() => {
-      const tooltip = elements.hideSlotsTooltip || document.getElementById('hideSlotsTooltip');
-      const toggleSwitch = document.querySelector('.toggle-hide-switch');
-      if (!tooltip) return;
+  function updateTabCounts() {
+    let availCount = 0;
+    let lowCount = 0;
+    let overCount = 0;
 
-      tooltip.classList.add('auto-show');
+    // Count tabs relative to current brand selection
+    const relevantItems = state.currentBrand === 'all'
+      ? state.items
+      : state.items.filter(it => it.brand === state.currentBrand);
 
-      // Dismiss gently if the user interacts or after 7 seconds
-      const dismiss = () => {
-        tooltip.classList.remove('auto-show');
-        if (toggleSwitch) {
-          toggleSwitch.removeEventListener('click', dismiss);
-          toggleSwitch.removeEventListener('mouseenter', dismiss);
-        }
-      };
+    relevantItems.forEach(item => {
+      const status = getSlotStatus(item.remaining);
+      if (status.category === 'available') availCount++;
+      else if (status.category === 'low') lowCount++;
+      else if (status.category === 'over') overCount++;
+    });
 
-      if (toggleSwitch) {
-        toggleSwitch.addEventListener('click', dismiss);
-        toggleSwitch.addEventListener('mouseenter', dismiss);
-      }
-
-      setTimeout(dismiss, 7000);
-    }, 3000);
+    if (elements.countAll) elements.countAll.textContent = relevantItems.length;
+    if (elements.countAvailable) elements.countAvailable.textContent = availCount;
+    if (elements.countLow) elements.countLow.textContent = lowCount;
+    if (elements.countOver) elements.countOver.textContent = overCount;
   }
 
-  // Initialization
-  setupEventListeners();
-  setupTooltipOnboarding();
-  fetchLiveData(true);
+  /**
+   * Filter items by brand, category tab & search query
+   */
+  function applyFiltersAndRender() {
+    const query = state.searchQuery.toLowerCase().trim();
+    const filter = state.currentFilter;
+    const showOver = state.showSlotsOver;
+    const brand = state.currentBrand;
+
+    state.filteredItems = state.items.filter(item => {
+      // 1. Brand Filter
+      if (brand !== 'all' && item.brand !== brand) {
+        return false;
+      }
+
+      const status = getSlotStatus(item.remaining);
+
+      // 2. Hidden slots are hidden by default (remaining <= 0); user can turn on via toggle or on 'over' tab
+      if (!showOver && status.category === 'over' && filter !== 'over') {
+        return false;
+      }
+
+      // 3. Status Tab Filter
+      if (filter === 'available' && status.category !== 'available') return false;
+      if (filter === 'low' && status.category !== 'low') return false;
+      if (filter === 'over' && status.category !== 'over') return false;
+
+      // 4. Search Filter (Brand, SKU Name, ASIN)
+      if (query) {
+        const brandMatch = (item.brand || '').toLowerCase().includes(query);
+        const nameMatch = (item.name || '').toLowerCase().includes(query);
+        const asinMatch = (item.asin || '').toLowerCase().includes(query);
+        return brandMatch || nameMatch || asinMatch;
+      }
+
+      return true;
+    });
+
+    renderCurrentView();
+  }
+
+  /**
+   * Render either the Grouped Brand Sections or Empty State
+   */
+  function renderCurrentView() {
+    const count = state.filteredItems.length;
+
+    if (count === 0) {
+      if (elements.productGridContainer) elements.productGridContainer.style.display = 'none';
+      if (elements.emptyState) elements.emptyState.style.display = 'flex';
+      return;
+    }
+
+    if (elements.emptyState) elements.emptyState.style.display = 'none';
+    if (elements.productGridContainer) elements.productGridContainer.style.display = 'block';
+
+    // Group items by brand
+    const grouped = {};
+    state.filteredItems.forEach(item => {
+      const b = item.brand || 'General';
+      if (!grouped[b]) grouped[b] = [];
+      grouped[b].push(item);
+    });
+
+    const brandKeys = Object.keys(grouped).sort();
+
+    // If only one brand exists or user selected a single brand, show standard grid
+    if (brandKeys.length <= 1) {
+      const items = grouped[brandKeys[0]] || [];
+      elements.productGridContainer.innerHTML = `
+        <div class="product-grid" id="productGrid" aria-label="Product Showcase Grid">
+          ${items.map(renderCardHtml).join('')}
+        </div>
+      `;
+    } else {
+      // Multi-brand view: render stylish brand sections with summary headers!
+      const html = brandKeys.map(bName => {
+        const items = grouped[bName];
+        const bTarget = items.reduce((s, it) => s + (it.qty || 0), 0);
+        const bDone = items.reduce((s, it) => s + (it.done || 0), 0);
+        const bRem = items.reduce((s, it) => s + (it.remaining || 0), 0);
+
+        return `
+          <section class="brand-group">
+            <div class="brand-group-header glass-panel">
+              <div class="brand-group-left">
+                <div class="brand-group-badge-icon">🏷️</div>
+                <h2 class="brand-group-title">${escapeHtml(bName)}</h2>
+                <span class="brand-group-count">${items.length} Products</span>
+              </div>
+              <div class="brand-group-stats">
+                <span class="brand-stat-pill">Target: <strong>${bTarget}</strong></span>
+                <span class="brand-stat-pill">Done: <strong>${bDone}</strong></span>
+                <span class="brand-stat-pill pill-remaining">Slots Left: <strong>${bRem}</strong></span>
+              </div>
+            </div>
+            <div class="product-grid">
+              ${items.map(renderCardHtml).join('')}
+            </div>
+          </section>
+        `;
+      }).join('');
+
+      elements.productGridContainer.innerHTML = html;
+    }
+
+    attachCardActions();
+    resolveMissingImages();
+  }
+
+  /**
+   * Render individual Product Card HTML
+   */
+  function renderCardHtml(item) {
+    const status = getSlotStatus(item.remaining);
+    const cardDisabledClass = status.isDisabled ? 'is-disabled' : '';
+
+    const hasImage = Boolean(item.image);
+    const imageUrl = hasImage
+      ? item.image
+      : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 24 24" fill="none" stroke="%2394A3B8" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
+
+    const percent = item.qty > 0 ? Math.min(100, Math.round((item.done / item.qty) * 100)) : 0;
+    const isDoneFull = percent >= 100;
+
+    return `
+      <div class="product-card glass-panel ${cardDisabledClass}">
+        <!-- Image Chamber -->
+        <div class="product-image-box ${!hasImage ? 'is-loading-img' : ''}" data-asin="${escapeHtml(item.asin)}">
+          <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(item.name)}" class="product-img" loading="lazy" data-asin="${escapeHtml(item.asin)}" onerror="window.handleImageError && window.handleImageError(this, '${escapeHtml(item.asin)}')">
+        </div>
+
+        <!-- Body -->
+        <div class="card-body">
+          <!-- Brand & ASIN Row -->
+          <div class="card-brand-tag-row">
+            <span class="card-brand-tag" title="Brand: ${escapeHtml(item.brand)}">${escapeHtml(item.brand)}</span>
+            <span class="card-asin-tag" data-copy-asin="${escapeHtml(item.asin)}" title="Click to copy ASIN">ASIN: ${escapeHtml(item.asin)}</span>
+          </div>
+
+          <!-- Product Title -->
+          <h3 class="product-title" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</h3>
+
+          <!-- Slot Status Badge -->
+          <div class="slot-badge ${status.badgeClass}">
+            <span>${status.label}</span>
+          </div>
+
+          <!-- 3-Column Slot Metric Grid: Target | Done | Slots -->
+          <div class="card-metrics-grid">
+            <div class="card-metric-col" title="Target Units Required">
+              <span class="metric-col-lbl">Target</span>
+              <span class="metric-col-val">${item.qty}</span>
+            </div>
+            <div class="card-metric-col" title="Units Ordered / Fulfilled">
+              <span class="metric-col-lbl">Done</span>
+              <span class="metric-col-val">${item.done}</span>
+            </div>
+            <div class="card-metric-col" title="Slots Remaining">
+              <span class="metric-col-lbl">Left</span>
+              <span class="metric-col-val ${status.remClass}">${item.remaining}</span>
+            </div>
+          </div>
+
+          <!-- Progress Bar -->
+          <div class="card-progress-wrap" title="${percent}% Completed">
+            <div class="card-progress-fill ${isDoneFull ? 'done-full' : ''}" style="width: ${percent}%;"></div>
+          </div>
+
+          <!-- Action Buttons: View Link & Copy Link -->
+          <div class="card-bottom-row no-less-tag">
+            ${item.link && !status.isDisabled ? `
+              <div class="card-action-btns">
+                <a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer" class="btn-product-link-small" title="Open product listing on Amazon">
+                  <span>View Link</span>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                </a>
+                <button class="btn-copy-link-small" data-link="${escapeHtml(item.link)}" title="Copy link to clipboard" aria-label="Copy link to clipboard">
+                  <svg class="copy-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                  <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </button>
+              </div>
+            ` : `
+              <button class="btn-product-link-small is-disabled" disabled title="Slots are over or inactive">
+                <span>⛔ Slot Over</span>
+              </button>
+            `}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Attach card interaction listeners (Copy link & Copy ASIN)
+   */
+  function attachCardActions() {
+    // Copy Amazon Link
+    document.querySelectorAll('.btn-copy-link-small').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const link = btn.dataset.link;
+        if (!link) return;
+
+        try {
+          await navigator.clipboard.writeText(link);
+          const copyIcon = btn.querySelector('.copy-icon');
+          const checkIcon = btn.querySelector('.check-icon');
+          if (copyIcon) copyIcon.style.display = 'none';
+          if (checkIcon) checkIcon.style.display = 'inline-block';
+
+          showToast('✓ Product link copied to clipboard!', 'success');
+
+          setTimeout(() => {
+            if (copyIcon) copyIcon.style.display = 'inline-block';
+            if (checkIcon) checkIcon.style.display = 'none';
+          }, 2000);
+        } catch (err) {
+          showToast('Failed to copy link', 'error');
+        }
+      });
+    });
+
+    // Copy ASIN
+    document.querySelectorAll('[data-copy-asin]').forEach(tag => {
+      tag.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const asin = tag.dataset.copyAsin;
+        if (!asin) return;
+
+        try {
+          await navigator.clipboard.writeText(asin);
+          showToast(`✓ Copied ASIN: ${asin}`, 'success');
+        } catch (err) {
+          showToast('Failed to copy ASIN', 'error');
+        }
+      });
+    });
+  }
+
+  /**
+   * Asynchronously resolves missing images from /api/asin-image
+   */
+  async function resolveMissingImages() {
+    const missingBoxes = document.querySelectorAll('.product-image-box.is-loading-img');
+    for (const box of missingBoxes) {
+      const asin = box.dataset.asin;
+      if (!asin || state.resolvingAsins.has(asin)) continue;
+
+      state.resolvingAsins.add(asin);
+      try {
+        const res = await fetch(`/api/asin-image?asin=${encodeURIComponent(asin)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.image) {
+            const img = box.querySelector('img');
+            if (img) img.src = data.image;
+            box.classList.remove('is-loading-img');
+          }
+        }
+      } catch (e) {
+        // silent fail
+      }
+    }
+  }
+
+  // Global image error handler
+  window.handleImageError = function (imgEl, asin) {
+    if (imgEl.dataset.failedOnce) return;
+    imgEl.dataset.failedOnce = 'true';
+    imgEl.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 24 24" fill="none" stroke="%2394A3B8" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
+  };
+
+  /**
+   * Refresh Images via /api/refresh-images
+   */
+  async function refreshImages() {
+    if (state.isRefreshingImages) return;
+    state.isRefreshingImages = true;
+
+    if (elements.refreshImagesIcon) elements.refreshImagesIcon.classList.add('is-spinning');
+    showToast('Refreshing product images from Amazon...', 'info');
+
+    try {
+      const res = await fetch('/api/refresh-images', { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
+      const data = await res.json();
+      showToast(`✓ Refreshed ${data.fetched || 0} images!`, 'success');
+      await fetchLiveData(false);
+    } catch (err) {
+      showToast(`Image refresh failed: ${err.message}`, 'error');
+    } finally {
+      state.isRefreshingImages = false;
+      if (elements.refreshImagesIcon) elements.refreshImagesIcon.classList.remove('is-spinning');
+    }
+  }
+
+  /**
+   * Auto-refresh countdown management
+   */
+  function startCountdown() {
+    if (state.countdownInterval) clearInterval(state.countdownInterval);
+    state.countdown = 30;
+    if (elements.countdownSeconds) elements.countdownSeconds.textContent = `${state.countdown}s`;
+
+    state.countdownInterval = setInterval(() => {
+      state.countdown--;
+      if (elements.countdownSeconds) elements.countdownSeconds.textContent = `${state.countdown}s`;
+
+      if (state.countdown <= 0) {
+        clearInterval(state.countdownInterval);
+        fetchLiveData(false);
+      }
+    }, 1000);
+  }
+
+  function resetCountdown() {
+    startCountdown();
+  }
+
+  /**
+   * Event Listeners Setup
+   */
+  function setupEventListeners() {
+    // Sync Button
+    if (elements.btnSyncNow) {
+      elements.btnSyncNow.addEventListener('click', () => fetchLiveData(true));
+    }
+
+    // Refresh Images Button
+    if (elements.btnRefreshImages) {
+      elements.btnRefreshImages.addEventListener('click', refreshImages);
+    }
+
+    // Search Input
+    if (elements.searchInput) {
+      elements.searchInput.addEventListener('input', (e) => {
+        state.searchQuery = e.target.value;
+        if (elements.searchClearBtn) {
+          elements.searchClearBtn.style.display = state.searchQuery ? 'block' : 'none';
+        }
+        applyFiltersAndRender();
+      });
+
+      // Keyboard shortcuts
+      document.addEventListener('keydown', (e) => {
+        if (e.key === '/' && document.activeElement !== elements.searchInput) {
+          e.preventDefault();
+          elements.searchInput.focus();
+        } else if (e.key === 'Escape' && document.activeElement === elements.searchInput) {
+          elements.searchInput.value = '';
+          state.searchQuery = '';
+          if (elements.searchClearBtn) elements.searchClearBtn.style.display = 'none';
+          applyFiltersAndRender();
+          elements.searchInput.blur();
+        } else if ((e.key === 'r' || e.key === 'R') && document.activeElement !== elements.searchInput) {
+          e.preventDefault();
+          fetchLiveData(true);
+        }
+      });
+    }
+
+    // Clear Search Button
+    if (elements.searchClearBtn) {
+      elements.searchClearBtn.addEventListener('click', () => {
+        elements.searchInput.value = '';
+        state.searchQuery = '';
+        elements.searchClearBtn.style.display = 'none';
+        applyFiltersAndRender();
+        elements.searchInput.focus();
+      });
+    }
+
+    // Brand "All" Button
+    if (elements.btnBrandAll) {
+      elements.btnBrandAll.addEventListener('click', () => setBrandFilter('all'));
+    }
+
+    // Filter Tabs (All, Available, Low, Over)
+    elements.filterTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        elements.filterTabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        state.currentFilter = tab.dataset.filter;
+        applyFiltersAndRender();
+      });
+    });
+
+    // Show Slots Over Toggle
+    if (elements.showSlotsOverCheckbox) {
+      elements.showSlotsOverCheckbox.addEventListener('change', (e) => {
+        state.showSlotsOver = e.target.checked;
+        applyFiltersAndRender();
+      });
+    }
+
+    // Reset Filters Button
+    if (elements.btnResetFilters) {
+      elements.btnResetFilters.addEventListener('click', () => {
+        state.currentBrand = 'all';
+        state.currentFilter = 'all';
+        state.searchQuery = '';
+        if (elements.searchInput) elements.searchInput.value = '';
+        if (elements.searchClearBtn) elements.searchClearBtn.style.display = 'none';
+        if (elements.btnBrandAll) elements.btnBrandAll.classList.add('active');
+        elements.filterTabs.forEach(t => t.classList.toggle('active', t.dataset.filter === 'all'));
+        applyFiltersAndRender();
+      });
+    }
+  }
+
+  // Initialize
+  document.addEventListener('DOMContentLoaded', () => {
+    setupEventListeners();
+    fetchLiveData(false);
+  });
 
 })();

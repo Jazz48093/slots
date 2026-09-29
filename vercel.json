@@ -1,10 +1,6 @@
 {
   "version": 2,
   "cleanUrls": true,
-  "rewrites": [
-    { "source": "/dhruv", "destination": "/dhruv.html" },
-    { "source": "/med", "destination": "/med.html" }
-  ],
   "headers": [
     {
       "source": "/(.*)",

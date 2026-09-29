@@ -2,13 +2,14 @@ import fs from 'fs';
 import path from 'path';
 import https from 'https';
 
-const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1EDMwxLBoYV_-4RXul07q4NiXGF6uxiDTaakn4Akhpoc/export?format=csv&gid=1705723818";
+const SPREADSHEET_ID = "1EDMwxLBoYV_-4RXul07q4NiXGF6uxiDTaakn4Akhpoc";
+const DEFAULT_GID = "823537914"; // "Slots - All Brands"
 
-function fetchTextWithRedirect(url) {
+function fetchUrl(url) {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        https.get(res.headers.location, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res2) => {
+        https.get(res.headers.location, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } }, (res2) => {
           let data = '';
           res2.on('data', chunk => data += chunk);
           res2.on('end', () => resolve(data));
@@ -24,9 +25,26 @@ function fetchTextWithRedirect(url) {
   });
 }
 
-function parseCsv(text, asinCache, col = 'g') {
+async function fetchSheetCsv(gid) {
+  // 1. Direct Google Visualization API (fast, no redirect)
+  const gvizUrl = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&gid=${gid}&_nocache=${Date.now()}`;
+  try {
+    const text = await fetchUrl(gvizUrl);
+    if (text && text.trim().length > 0) {
+      return text;
+    }
+  } catch (e) {
+    // fallback to export format
+  }
+
+  // 2. Fallback to export endpoint
+  const exportUrl = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${gid}&_nocache=${Date.now()}`;
+  return await fetchUrl(exportUrl);
+}
+
+function parseCsv(text, asinCache) {
   const lines = text.split(/\r?\n/).filter(l => l.trim());
-  if (lines.length <= 1) return [];
+  if (lines.length <= 1) return { items: [], brands: [] };
 
   function parseRow(rowStr) {
     const row = [];
@@ -56,29 +74,30 @@ function parseCsv(text, asinCache, col = 'g') {
     return defIdx;
   }
 
-  const isMed = String(col).toLowerCase() === 'i' || String(col).toLowerCase() === 'med';
-
-  const nameIdx = findCol(['sku', 'product', 'item'], 0);
-  const asinIdx = findCol(['asin'], 1);
-  const linkIdx = findCol(['link', 'url'], 2);
-  const qtyIdx = findCol(['qty', 'quantity', 'target'], 3);
-  const doneIdx = findCol(['done', 'order'], 4);
-  const remIdx = findCol(['remaining', 'rem', 'left', 'slot'], 5);
-  const lessIdx = isMed
-    ? findCol(['med. less', 'med less', 'med'], 8)
-    : findCol(['dhruv less', 'dhruv', 'less %', 'less'], 6);
+  const brandIdx = findCol(['brand'], -1);
+  const nameIdx = findCol(['sku', 'product', 'item', 'name'], brandIdx === 0 ? 1 : 0);
+  const asinIdx = findCol(['asin'], 2);
+  const linkIdx = findCol(['link', 'url'], 3);
+  const qtyIdx = findCol(['qty', 'quantity', 'target'], 4);
+  const doneIdx = findCol(['done', 'order', 'placed'], 5);
+  const remIdx = findCol(['remaining', 'rem', 'left', 'slot', 'pending'], 6);
+  const lessIdx = findCol(['less', 'discount', '%'], -1);
 
   const items = [];
+  const brandSet = new Set();
+
   for (let i = 1; i < lines.length; i++) {
     const r = parseRow(lines[i]);
     if (!r || r.length === 0 || !r.some(v => v)) continue;
-    const name = r[nameIdx] || '';
-    const asin = r[asinIdx] || '';
-    let link = r[linkIdx] || '';
-    const qtyRaw = r[qtyIdx] || '0';
-    const doneRaw = r[doneIdx] || '0';
-    const remRaw = r[remIdx] || '0';
-    const lessRaw = r[lessIdx] || '';
+
+    const brand = (brandIdx !== -1 && r[brandIdx]) ? r[brandIdx].trim() : 'General';
+    const name = (nameIdx !== -1 && r[nameIdx]) ? r[nameIdx].trim() : '';
+    const asin = (asinIdx !== -1 && r[asinIdx]) ? r[asinIdx].trim() : '';
+    let link = (linkIdx !== -1 && r[linkIdx]) ? r[linkIdx].trim() : '';
+    const qtyRaw = (qtyIdx !== -1 && r[qtyIdx]) ? r[qtyIdx].trim() : '0';
+    const doneRaw = (doneIdx !== -1 && r[doneIdx]) ? r[doneIdx].trim() : '0';
+    const remRaw = (remIdx !== -1 && r[remIdx]) ? r[remIdx].trim() : '0';
+    const lessRaw = (lessIdx !== -1 && r[lessIdx]) ? r[lessIdx].trim() : '';
 
     if (!name && !asin) continue;
 
@@ -93,11 +112,25 @@ function parseCsv(text, asinCache, col = 'g') {
     const qty = parseInt(qtyRaw, 10) || 0;
     const done = parseInt(doneRaw, 10) || 0;
     const remaining = parseInt(remRaw, 10) || 0;
-    const image = asinCache[asin] || '';
+    const image = (asin && asinCache[asin]) ? asinCache[asin] : '';
 
-    items.push({ name, asin, link, qty, done, remaining, less, image });
+    if (brand) brandSet.add(brand);
+
+    items.push({
+      brand,
+      name,
+      asin,
+      link,
+      qty,
+      done,
+      remaining,
+      less,
+      image
+    });
   }
-  return items;
+
+  const brands = Array.from(brandSet).sort();
+  return { items, brands };
 }
 
 export default async function handler(req, res) {
@@ -119,18 +152,29 @@ export default async function handler(req, res) {
       }
     }
 
-    // 2. Query Google Sheet with nanosecond cache-busting timestamp
-    const nocacheUrl = `${SHEET_CSV_URL}&_nocache=${Date.now()}`;
-    const csvText = await fetchTextWithRedirect(nocacheUrl);
+    // 2. Fetch CSV
+    const gid = (req.query && req.query.gid) || DEFAULT_GID;
+    const csvText = await fetchSheetCsv(gid);
 
     // 3. Parse and enrich
-    const col = (req.query && (req.query.col || req.query.c)) || 'g';
-    const items = parseCsv(csvText, asinCache, col);
+    const { items, brands } = parseCsv(csvText, asinCache);
+
+    const totalTarget = items.reduce((sum, item) => sum + item.qty, 0);
+    const totalDone = items.reduce((sum, item) => sum + item.done, 0);
+    const totalRemaining = items.reduce((sum, item) => sum + item.remaining, 0);
 
     res.status(200).json({
       status: 'success',
       timestamp: Math.floor(Date.now() / 1000),
       total: items.length,
+      brands,
+      stats: {
+        totalBrands: brands.length,
+        totalSkus: items.length,
+        totalTarget,
+        totalDone,
+        totalRemaining
+      },
       items
     });
   } catch (err) {

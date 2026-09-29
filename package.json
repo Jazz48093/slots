@@ -1,7 +1,7 @@
 {
-  "name": "uc104-live-counter",
+  "name": "slots-live-counter",
   "version": "1.0.0",
-  "description": "UC 104 Pending Slots - Live Counter Dashboard",
+  "description": "Multi-Brand Slots Live Counter Dashboard",
   "type": "module",
   "scripts": {
     "dev": "python3 serve.py",
