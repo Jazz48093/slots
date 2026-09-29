@@ -92,19 +92,40 @@ function parseCsv(text, asinCache) {
 
     const brand = (brandIdx !== -1 && r[brandIdx]) ? r[brandIdx].trim() : 'General';
     const name = (nameIdx !== -1 && r[nameIdx]) ? r[nameIdx].trim() : '';
-    const asin = (asinIdx !== -1 && r[asinIdx]) ? r[asinIdx].trim() : '';
+    let asin = (asinIdx !== -1 && r[asinIdx]) ? r[asinIdx].trim() : '';
     let link = (linkIdx !== -1 && r[linkIdx]) ? r[linkIdx].trim() : '';
     const qtyRaw = (qtyIdx !== -1 && r[qtyIdx]) ? r[qtyIdx].trim() : '0';
     const doneRaw = (doneIdx !== -1 && r[doneIdx]) ? r[doneIdx].trim() : '0';
     const remRaw = (remIdx !== -1 && r[remIdx]) ? r[remIdx].trim() : '0';
     const lessRaw = (lessIdx !== -1 && r[lessIdx]) ? r[lessIdx].trim() : '';
 
-    if (!name && !asin) continue;
-
     if (link) {
       if (link.startsWith('www.')) link = 'https://' + link;
       else if (!link.startsWith('http://') && !link.startsWith('https://')) link = 'https://' + link;
     }
+
+    // Auto-extract ASIN / ID from link if empty
+    if (!asin && link) {
+      const amazonMatch = link.match(/field-asin=([A-Z0-9]{10})/i) ||
+                          link.match(/\/dp\/([A-Z0-9]{10})/i) ||
+                          link.match(/\/gp\/product\/([A-Z0-9]{10})/i);
+      if (amazonMatch) {
+        asin = amazonMatch[1].toUpperCase();
+      } else {
+        const blinkitMatch = link.match(/\/prid\/(\d+)/i);
+        if (blinkitMatch) {
+          asin = blinkitMatch[1];
+        }
+      }
+    }
+
+    if (!name && !asin) continue;
+
+    let platform = 'Product';
+    if (link.includes('amazon.')) platform = 'Amazon';
+    else if (link.includes('blinkit.')) platform = 'Blinkit';
+    else if (link.includes('flipkart.')) platform = 'Flipkart';
+    else if (link.includes('myntra.')) platform = 'Myntra';
 
     const lessClean = lessRaw.trim();
     const less = (!lessClean || ['--', '-', '0%', 'N/A', 'na', 'null', 'none'].includes(lessClean)) ? '-' : lessClean;
@@ -121,6 +142,7 @@ function parseCsv(text, asinCache) {
       name,
       asin,
       link,
+      platform,
       qty,
       done,
       remaining,

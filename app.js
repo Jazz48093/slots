@@ -446,6 +446,11 @@
     const percent = item.qty > 0 ? Math.min(100, Math.round((item.done / item.qty) * 100)) : 0;
     const isDoneFull = percent >= 100;
 
+    const isBlinkit = (item.platform === 'Blinkit') || (item.link && item.link.includes('blinkit.'));
+    const isAmazon = (item.platform === 'Amazon') || (item.link && item.link.includes('amazon.'));
+    const platformLabel = isBlinkit ? 'Blinkit' : (isAmazon ? 'Amazon' : 'Product');
+    const idPrefix = isBlinkit ? 'ID' : (isAmazon ? 'ASIN' : 'ID');
+
     return `
       <div class="product-card glass-panel ${cardDisabledClass}">
         <!-- Image Chamber -->
@@ -458,7 +463,7 @@
           <!-- Brand & ASIN Row -->
           <div class="card-brand-tag-row">
             <span class="card-brand-tag" title="Brand: ${escapeHtml(item.brand)}">${escapeHtml(item.brand)}</span>
-            <span class="card-asin-tag" data-copy-asin="${escapeHtml(item.asin)}" title="Click to copy ASIN">ASIN: ${escapeHtml(item.asin)}</span>
+            <span class="card-asin-tag" data-copy-asin="${escapeHtml(item.asin)}" title="Click to copy ${idPrefix}">${idPrefix}: ${escapeHtml(item.asin)}</span>
           </div>
 
           <!-- Product Title -->
@@ -494,8 +499,8 @@
           <div class="card-bottom-row no-less-tag">
             ${item.link && !status.isDisabled ? `
               <div class="card-action-btns">
-                <a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer" class="btn-product-link-small" title="Open product listing on Amazon">
-                  <span>View Link</span>
+                <a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer" class="btn-product-link-small" title="Open product listing on ${platformLabel}">
+                  <span>View on ${platformLabel}</span>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
                 </a>
                 <button class="btn-copy-link-small" data-link="${escapeHtml(item.link)}" title="Copy link to clipboard" aria-label="Copy link to clipboard">
