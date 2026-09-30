@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vercel Sites Hub • Central Project Navigation</title>
+  <meta name="description" content="Central navigation dashboard for all hosted Vercel URLs, live monitors, client portals, and web applications with real-time health checks.">
+  
+  <!-- Modern Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Existing Master Design System & Specialized Vercel Hub Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="sites.css">
+</head>
+<body>
+  <!-- Ambient Luminous Background Orbs (Consistent with style.md) -->
+  <div class="ambient-orb orb-1" aria-hidden="true"></div>
+  <div class="ambient-orb orb-2" aria-hidden="true"></div>
+  <div class="ambient-orb orb-3" aria-hidden="true"></div>
+
+  <div class="app-container">
+
+    <!-- Executive Top Header -->
+    <header class="glass-panel main-header">
+      <div class="header-left">
+        <div class="brand-badge">
+          <div class="brand-icon brand-icon-vercel">
+            <svg class="vercel-triangle" width="22" height="20" viewBox="0 0 24 21" fill="currentColor">
+              <path d="M12 0L24 21H0L12 0Z"/>
+            </svg>
+          </div>
+          <div class="brand-titles">
+            <div class="title-row">
+              <h1 class="page-title">Vercel Sites Hub</h1>
+              <span class="vercel-status-pill" title="Central Navigation Directory for Hosted Deployments">
+                <span class="pulse-dot"></span>
+                <span>Active Portal</span>
+              </span>
+            </div>
+            <p class="page-subtitle">Centralized Quick Navigation &amp; Health Monitor for All Hosted Vercel Apps</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <!-- Instant Search Box -->
+        <div class="search-box">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="searchInput" placeholder="Search URL or description..." autocomplete="off" spellcheck="false">
+          <button id="searchClearBtn" class="search-clear-btn" aria-label="Clear search" title="Clear (Esc)">&times;</button>
+          <span class="search-hint">/</span>
+        </div>
+
+        <!-- Add Hosted URL Button -->
+        <button id="btnAddSiteModalOpen" class="btn-primary-glass btn-add-site" title="Add another hosted URL">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>+ Add URL</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Container: Highlighted URLs & Descriptions -->
+    <main class="content-container">
+      <div id="sitesGridContainer">
+        <section class="sites-grid" id="sitesGrid" aria-label="Hosted Projects Grid">
+          <!-- Rendered dynamically by sites.js -->
+        </section>
+      </div>
+
+      <!-- Empty State -->
+      <div class="empty-state glass-panel" id="emptyState" style="display: none;">
+        <div class="empty-icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            <line x1="8" y1="11" x2="14" y2="11"></line>
+          </svg>
+        </div>
+        <h3>No matching hosted projects found</h3>
+        <p>No project matches your active filter or search keywords.</p>
+        <button class="btn-secondary-glass" onclick="DOM.searchInput.value=''; currentSearch=''; currentFilter='all'; render();">Reset Filters</button>
+      </div>
+    </main>
+
+    <!-- Sleek Minimalist Footer -->
+    <footer class="app-footer">
+      <div class="footer-content">
+        <span>Vercel Sites Navigation Portal</span>
+        <span>•</span>
+        <span>Zero-Latency Direct Links</span>
+        <span>•</span>
+        <span>Local Persistence Enabled</span>
+        <span>•</span>
+        <span>Design: Glassmorphic OS</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Add Hosted URL Modal -->
+  <div class="modal-overlay" id="siteModal" role="dialog" aria-modal="true" aria-labelledby="siteModalTitle">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-title-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+            </svg>
+          </div>
+          <h2 class="modal-title" id="siteModalTitle">Add Hosted URL</h2>
+        </div>
+        <button class="modal-close-btn" aria-label="Close dialog">&times;</button>
+      </div>
+
+      <form id="siteForm">
+        <div class="modal-body">
+          <input type="hidden" id="siteIdInput">
+
+          <div class="form-group">
+            <label for="siteUrlInput" class="form-label">Hosted URL *</label>
+            <input type="url" id="siteUrlInput" class="form-input" placeholder="https://example.vercel.app" required>
+            <span class="form-hint">Enter the full hosted address or custom domain.</span>
+          </div>
+
+          <div class="form-group">
+            <label for="siteDescInput" class="form-label">Description</label>
+            <textarea id="siteDescInput" class="form-textarea" placeholder="Add a description for this URL (can also be edited anytime later via ✏️)..."></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary-glass btn-modal-cancel">Cancel</button>
+          <button type="submit" class="btn-primary-glass">Save URL</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+  <script src="sites.js"></script>
+</body>
+</html>

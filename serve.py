@@ -93,12 +93,17 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
         elif path in ['/med', '/med/']:
             self.path = '/med.html'
             super().do_GET()
+        elif path in ['/sites', '/sites/', '/hub', '/hub/', '/vercel', '/vercel/']:
+            self.path = '/sites.html'
+            super().do_GET()
         elif path == '/api/data':
             self.handle_api_data(parsed)
         elif path == '/api/asin-image':
             self.handle_asin_image(parsed)
         elif path == '/api/refresh-images':
             self.handle_refresh_images(parsed)
+        elif path == '/api/vercel-projects':
+            self.handle_vercel_projects(parsed)
         else:
             super().do_GET()
 
@@ -321,6 +326,95 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
         self.wfile.write(json.dumps(res).encode('utf-8'))
+
+    def handle_vercel_projects(self, parsed):
+        params = urllib.parse.parse_qs(parsed.query)
+        token = params.get('token', [None])[0]
+        auth_hdr = self.headers.get('Authorization')
+        if auth_hdr and auth_hdr.startswith('Bearer '):
+            token = auth_hdr.split('Bearer ', 1)[1].strip()
+
+        if not token:
+            default_data = {
+                "status": "success",
+                "mode": "default",
+                "projects": [
+                    {
+                        "id": "brand-slots-main",
+                        "name": "Brand Slots Live Counter",
+                        "url": "https://brand-slots.vercel.app",
+                        "category": "Live Dashboards",
+                        "framework": "Vercel Serverless",
+                        "icon": "🏷️",
+                        "description": "Multi-Brand Live Counter production portal tracking order targets, remaining slots, and ASIN catalog.",
+                        "environment": "Production",
+                        "pinned": True
+                    },
+                    {
+                        "id": "uc104-main",
+                        "name": "Slots Live Counter",
+                        "url": "https://uc104.vercel.app",
+                        "category": "Live Dashboards",
+                        "framework": "Vercel Serverless",
+                        "icon": "📊",
+                        "description": "Multi-Brand Real-Time Order Targets, Fulfilled Quantities & Remaining Slots synced live with Google Sheets.",
+                        "environment": "Production",
+                        "pinned": True
+                    },
+                    {
+                        "id": "uc104-med",
+                        "name": "MED Special Allocation Portal",
+                        "url": "https://uc104.vercel.app/med",
+                        "category": "Client Portals",
+                        "framework": "Vercel Serverless",
+                        "icon": "💊",
+                        "description": "Specialized Medical & Merchant allocation tracker with Col I discount matrices and 1-click copy action.",
+                        "environment": "Production",
+                        "pinned": True
+                    },
+                    {
+                        "id": "uc104-dhruv",
+                        "name": "Dhruv Partner Monitor",
+                        "url": "https://uc104.vercel.app/dhruv",
+                        "category": "Client Portals",
+                        "framework": "Vercel Serverless",
+                        "icon": "🤝",
+                        "description": "Dedicated partner fulfillment monitoring tracking Col G allocation metrics and real-time inventory count.",
+                        "environment": "Production",
+                        "pinned": False
+                    }
+                ]
+            }
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(default_data).encode('utf-8'))
+            return
+
+        try:
+            req = urllib.request.Request(
+                "https://api.vercel.com/v9/projects",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "User-Agent": "Vercel-Sites-Hub/1.0"
+                }
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = resp.read()
+                self.send_response(resp.status)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(data)
+        except urllib.error.HTTPError as e:
+            self.send_response(e.code)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(e.read())
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
 
 def run_server():
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
