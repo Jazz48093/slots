@@ -2,9 +2,8 @@
   "version": 2,
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/sites", "destination": "/sites.html" },
-    { "source": "/hub", "destination": "/sites.html" },
-    { "source": "/vercel", "destination": "/sites.html" }
+    { "source": "/hub", "destination": "/sites" },
+    { "source": "/vercel", "destination": "/sites" }
   ],
   "headers": [
     {
