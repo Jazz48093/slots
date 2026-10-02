@@ -47,6 +47,8 @@
     
     // Auth Elements
     authLockOverlay: document.getElementById('authLockOverlay'),
+    emailSignInForm: document.getElementById('emailSignInForm'),
+    emailInput: document.getElementById('emailInput'),
     googleSignInBtn: document.getElementById('googleSignInBtn'),
     authStatusAlert: document.getElementById('authStatusAlert'),
     btnQuickDemoLogin: document.getElementById('btnQuickDemoLogin'),
@@ -924,6 +926,29 @@
    * Event Listeners Setup
    */
   function setupEventListeners() {
+    // Direct Email Sign In Form
+    if (elements.emailSignInForm) {
+      elements.emailSignInForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const email = (elements.emailInput.value || '').trim();
+        if (!email || !email.includes('@')) {
+          showToast('Please enter a valid email address', 'error');
+          return;
+        }
+
+        const username = email.split('@')[0];
+        const displayName = username.charAt(0).toUpperCase() + username.slice(1);
+
+        authenticateUser({
+          name: displayName,
+          email: email,
+          picture: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=4f46e5`,
+          sub: 'email-' + Date.now(),
+          loginTime: Date.now()
+        }, true);
+      });
+    }
+
     // Sign Out Button
     if (elements.btnSignOut) {
       elements.btnSignOut.addEventListener('click', signOut);

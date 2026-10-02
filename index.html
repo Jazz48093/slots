@@ -318,6 +318,28 @@
       <h2 class="auth-title">Slots Live Counter</h2>
       <p class="auth-subtitle">Sign in with your Google / Gmail account to view live order targets, fulfilled quantities, and remaining slots.</p>
 
+      <!-- Direct Email Sign In Option -->
+      <form class="email-signin-form" id="emailSignInForm">
+        <div class="email-input-wrap">
+          <svg class="email-input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+            <polyline points="22,6 12,13 2,6"></polyline>
+          </svg>
+          <input type="email" id="emailInput" placeholder="Enter your Gmail address..." value="jazz48093@gmail.com" required autocomplete="email">
+        </div>
+        <button type="submit" class="btn-email-signin" id="btnEmailSignIn">
+          <span>Sign In to Dashboard</span>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="12 5 19 12 12 19"></polyline>
+          </svg>
+        </button>
+      </form>
+
+      <div class="auth-divider">
+        <span>OR SIGN IN WITH GOOGLE OAUTH POPUP</span>
+      </div>
+
       <!-- Google Sign In Container -->
       <div class="auth-action-box">
         <div id="googleSignInBtn" class="google-btn-wrapper"></div>
