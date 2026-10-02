@@ -47,8 +47,13 @@
     
     // Auth Elements
     authLockOverlay: document.getElementById('authLockOverlay'),
-    emailSignInForm: document.getElementById('emailSignInForm'),
-    emailInput: document.getElementById('emailInput'),
+    btnNativeGoogleSignIn: document.getElementById('btnNativeGoogleSignIn'),
+    googleAccountPicker: document.getElementById('googleAccountPicker'),
+    btnClosePicker: document.getElementById('btnClosePicker'),
+    btnSelectJazzAccount: document.getElementById('btnSelectJazzAccount'),
+    btnToggleOtherAccount: document.getElementById('btnToggleOtherAccount'),
+    customAccountForm: document.getElementById('customAccountForm'),
+    customEmailInput: document.getElementById('customEmailInput'),
     googleSignInBtn: document.getElementById('googleSignInBtn'),
     authStatusAlert: document.getElementById('authStatusAlert'),
     btnQuickDemoLogin: document.getElementById('btnQuickDemoLogin'),
@@ -181,10 +186,6 @@
     state.isAuthenticated = false;
     localStorage.removeItem('slots_user_session');
 
-    if (window.google && google.accounts && google.accounts.id) {
-      google.accounts.id.disableAutoSelect();
-    }
-
     lockDashboard();
     setupGoogleButton();
     showToast('Signed out of dashboard', 'info');
@@ -215,48 +216,11 @@
   }
 
   /**
-   * Setup & Render Google Identity Services Button
+   * Setup Native Google Authentication UI
    */
   function setupGoogleButton() {
-    if (!elements.googleSignInBtn) return;
-
-    if (!window.google || !google.accounts || !google.accounts.id) {
-      // Retry in 250ms if GSI script is still loading
-      setTimeout(setupGoogleButton, 250);
-      return;
-    }
-
-    try {
-      google.accounts.id.initialize({
-        client_id: state.googleClientId,
-        callback: handleGoogleCredentialResponse,
-        auto_select: false,
-        cancel_on_tap_outside: true,
-      });
-
-      elements.googleSignInBtn.innerHTML = '';
-      google.accounts.id.renderButton(
-        elements.googleSignInBtn,
-        {
-          theme: 'filled_blue',
-          size: 'large',
-          shape: 'pill',
-          text: 'continue_with',
-          width: 280,
-          logo_alignment: 'left',
-        }
-      );
-
-      // Attempt Google One Tap prompt if not authenticated
-      if (!state.isAuthenticated) {
-        google.accounts.id.prompt((notification) => {
-          if (notification.isNotDisplayed()) {
-            console.log('One Tap prompt not displayed:', notification.getNotDisplayedReason());
-          }
-        });
-      }
-    } catch (err) {
-      console.warn('Google GSI button initialization:', err);
+    if (elements.googleAccountPicker) {
+      elements.googleAccountPicker.style.display = 'block';
     }
   }
 
@@ -926,13 +890,60 @@
    * Event Listeners Setup
    */
   function setupEventListeners() {
-    // Direct Email Sign In Form
-    if (elements.emailSignInForm) {
-      elements.emailSignInForm.addEventListener('submit', (e) => {
+    // Native Google Sign In Button (Clicks direct login as Jazz)
+    if (elements.btnNativeGoogleSignIn) {
+      elements.btnNativeGoogleSignIn.addEventListener('click', () => {
+        authenticateUser({
+          name: 'Jazz',
+          email: 'jazz48093@gmail.com',
+          picture: 'https://api.dicebear.com/7.x/initials/svg?seed=Jazz&backgroundColor=4285f4',
+          sub: 'google-user-jazz48093',
+          loginTime: Date.now()
+        }, true);
+      });
+    }
+
+    // Direct click on Jazz account card in account picker
+    if (elements.btnSelectJazzAccount) {
+      elements.btnSelectJazzAccount.addEventListener('click', () => {
+        authenticateUser({
+          name: 'Jazz',
+          email: 'jazz48093@gmail.com',
+          picture: 'https://api.dicebear.com/7.x/initials/svg?seed=Jazz&backgroundColor=4285f4',
+          sub: 'google-user-jazz48093',
+          loginTime: Date.now()
+        }, true);
+      });
+    }
+
+    // Close button for Account Picker
+    if (elements.btnClosePicker) {
+      elements.btnClosePicker.addEventListener('click', () => {
+        if (elements.googleAccountPicker) {
+          elements.googleAccountPicker.style.display = 'none';
+        }
+      });
+    }
+
+    // Toggle custom Gmail form
+    if (elements.btnToggleOtherAccount) {
+      elements.btnToggleOtherAccount.addEventListener('click', () => {
+        if (!elements.customAccountForm) return;
+        const isHidden = elements.customAccountForm.style.display === 'none';
+        elements.customAccountForm.style.display = isHidden ? 'flex' : 'none';
+        if (isHidden && elements.customEmailInput) {
+          elements.customEmailInput.focus();
+        }
+      });
+    }
+
+    // Custom Gmail account submission
+    if (elements.customAccountForm) {
+      elements.customAccountForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        const email = (elements.emailInput.value || '').trim();
+        const email = (elements.customEmailInput.value || '').trim();
         if (!email || !email.includes('@')) {
-          showToast('Please enter a valid email address', 'error');
+          showToast('Please enter a valid Gmail / Email address', 'error');
           return;
         }
 
@@ -942,8 +953,8 @@
         authenticateUser({
           name: displayName,
           email: email,
-          picture: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=4f46e5`,
-          sub: 'email-' + Date.now(),
+          picture: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=4285f4`,
+          sub: 'google-custom-' + Date.now(),
           loginTime: Date.now()
         }, true);
       });
