@@ -1875,3 +1875,312 @@ body {
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(14, 165, 233, 0.2);
 }
+
+
+/* ==========================================================================
+   Google Auth, Lock Screen Gate & User Profile Header
+   ========================================================================== */
+
+/* App Container Blur when locked */
+.app-container.is-locked {
+  filter: blur(14px) saturate(0.8);
+  pointer-events: none;
+  user-select: none;
+  transition: filter 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Fullscreen Auth Overlay */
+.auth-lock-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: radial-gradient(circle at 50% 35%, rgba(30, 27, 75, 0.82), rgba(15, 23, 42, 0.94));
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.35s ease, visibility 0.35s ease;
+}
+
+.auth-lock-overlay.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Glass Card */
+.auth-card {
+  max-width: 440px;
+  width: 100%;
+  padding: 36px 30px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 24px;
+  box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(79, 70, 229, 0.12);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: authCardEnter 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes authCardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.auth-brand-badge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.auth-brand-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--primary-accent), var(--secondary-accent));
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 20px rgba(79, 70, 229, 0.35);
+}
+
+.auth-lock-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: var(--radius-pill);
+  background: rgba(79, 70, 229, 0.08);
+  border: 1px solid rgba(79, 70, 229, 0.22);
+  color: var(--primary-accent);
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.auth-title {
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.025em;
+  margin-top: 6px;
+}
+
+.auth-subtitle {
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 6px 0 18px 0;
+}
+
+.auth-action-box {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 48px;
+}
+
+.google-btn-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+}
+
+.auth-status-alert {
+  margin-top: 10px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.auth-features-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  width: 100%;
+  margin: 20px 0 16px 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.8);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  text-align: left;
+}
+
+.auth-feature-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.auth-footer-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.btn-link-subtle {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  text-decoration: underline;
+  transition: var(--transition-smooth);
+}
+
+.btn-link-subtle:hover {
+  color: var(--primary-accent);
+}
+
+.dot-separator {
+  color: var(--text-muted);
+}
+
+/* Client ID config popover */
+.client-id-modal {
+  margin-top: 14px;
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid var(--glass-border-subtle);
+  text-align: left;
+}
+
+.client-id-modal h4 {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.setup-hint {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.client-id-input-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.client-id-input-row input {
+  flex: 1;
+  font-size: 0.75rem;
+  padding: 6px 10px;
+  border: 1px solid var(--glass-border-subtle);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.client-id-input-row button {
+  padding: 6px 14px;
+  font-size: 0.74rem;
+}
+
+.setup-links-hint {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.setup-links-hint a {
+  color: var(--primary-accent);
+  text-decoration: underline;
+}
+
+/* User Profile Badge in Header */
+.user-profile-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 4px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid var(--glass-border-subtle);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid var(--primary-accent);
+  background: #e2e8f0;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  line-height: 1.15;
+}
+
+.user-name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.user-email {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-signout {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.08);
+  color: #dc2626;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  margin-left: 2px;
+}
+
+.btn-signout:hover {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: #dc2626;
+  transform: translateY(-1px);
+}
