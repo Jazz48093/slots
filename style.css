@@ -1822,3 +1822,56 @@ body {
 .card-progress-fill.done-full {
   background: linear-gradient(90deg, #10b981, #059669);
 }
+
+
+/* Quick Refresh Button & Interactive Countdown */
+.brand-filter-label-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.brand-quick-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: var(--radius-pill);
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--primary-accent);
+  background: rgba(79, 70, 229, 0.08);
+  border: 1px solid rgba(79, 70, 229, 0.25);
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  user-select: none;
+}
+
+.brand-quick-refresh-btn:hover {
+  background: rgba(79, 70, 229, 0.16);
+  border-color: var(--primary-accent);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.18);
+}
+
+.brand-quick-refresh-btn:active {
+  transform: translateY(0);
+}
+
+.quick-refresh-icon.is-spinning {
+  animation: spin 0.75s linear infinite;
+}
+
+.countdown-pill {
+  cursor: pointer !important;
+  user-select: none;
+  transition: var(--transition-smooth);
+}
+
+.countdown-pill:hover {
+  background: #ffffff !important;
+  border-color: var(--secondary-accent) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(14, 165, 233, 0.2);
+}

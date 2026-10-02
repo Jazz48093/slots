@@ -1,19 +1,28 @@
 import fs from 'fs';
 import path from 'path';
 import https from 'https';
+import { fileURLToPath } from 'url';
 
 const SPREADSHEET_ID = "1EDMwxLBoYV_-4RXul07q4NiXGF6uxiDTaakn4Akhpoc";
 const DEFAULT_GID = "823537914"; // "Slots - All Brands"
 
 function fetchUrl(url) {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } }, (res) => {
+    const parsedUrl = new URL(url);
+    const options = {
+      hostname: parsedUrl.hostname,
+      path: parsedUrl.pathname + parsedUrl.search,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    };
+
+    https.get(options, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        https.get(res.headers.location, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } }, (res2) => {
-          let data = '';
-          res2.on('data', chunk => data += chunk);
-          res2.on('end', () => resolve(data));
-        }).on('error', reject);
+        fetchUrl(res.headers.location).then(resolve).catch(reject);
       } else if (res.statusCode >= 200 && res.statusCode < 300) {
         let data = '';
         res.on('data', chunk => data += chunk);
@@ -26,19 +35,20 @@ function fetchUrl(url) {
 }
 
 async function fetchSheetCsv(gid) {
-  // 1. Direct Google Visualization API (fast, no redirect)
-  const gvizUrl = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&gid=${gid}&_nocache=${Date.now()}`;
+  const ts = Date.now();
+  // 1. Direct Google Visualization API (fast, instant live output)
+  const gvizUrl = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&gid=${gid}&tq=&headers=1&_nocache=${ts}`;
   try {
     const text = await fetchUrl(gvizUrl);
     if (text && text.trim().length > 0) {
       return text;
     }
   } catch (e) {
-    // fallback to export format
+    // fallback
   }
 
   // 2. Fallback to export endpoint
-  const exportUrl = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${gid}&_nocache=${Date.now()}`;
+  const exportUrl = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${gid}&_nocache=${ts}`;
   return await fetchUrl(exportUrl);
 }
 
@@ -74,14 +84,14 @@ function parseCsv(text, asinCache) {
     return defIdx;
   }
 
-  const brandIdx = findCol(['brand'], -1);
-  const nameIdx = findCol(['sku', 'product', 'item', 'name'], brandIdx === 0 ? 1 : 0);
-  const asinIdx = findCol(['asin'], 2);
-  const linkIdx = findCol(['link', 'url'], 3);
+  const brandIdx = findCol(['brand', 'company'], -1);
+  const nameIdx = findCol(['sku', 'product', 'item', 'title', 'name', 'desc'], brandIdx === 0 ? 1 : 0);
+  const asinIdx = findCol(['asin', 'prid', 'id'], 2);
+  const linkIdx = findCol(['link', 'url', 'href'], 3);
   const qtyIdx = findCol(['qty', 'quantity', 'target'], 4);
-  const doneIdx = findCol(['done', 'order', 'placed'], 5);
+  const doneIdx = findCol(['done', 'order', 'placed', 'completed'], 5);
   const remIdx = findCol(['remaining', 'rem', 'left', 'slot', 'pending'], 6);
-  const lessIdx = findCol(['less', 'discount', '%'], -1);
+  const lessIdx = findCol(['less', 'discount', '%', 'off'], -1);
 
   const items = [];
   const brandSet = new Set();
@@ -91,12 +101,12 @@ function parseCsv(text, asinCache) {
     if (!r || r.length === 0 || !r.some(v => v)) continue;
 
     const brand = (brandIdx !== -1 && r[brandIdx]) ? r[brandIdx].trim() : 'General';
-    const name = (nameIdx !== -1 && r[nameIdx]) ? r[nameIdx].trim() : '';
+    let name = (nameIdx !== -1 && r[nameIdx]) ? r[nameIdx].trim() : '';
     let asin = (asinIdx !== -1 && r[asinIdx]) ? r[asinIdx].trim() : '';
     let link = (linkIdx !== -1 && r[linkIdx]) ? r[linkIdx].trim() : '';
     const qtyRaw = (qtyIdx !== -1 && r[qtyIdx]) ? r[qtyIdx].trim() : '0';
     const doneRaw = (doneIdx !== -1 && r[doneIdx]) ? r[doneIdx].trim() : '0';
-    const remRaw = (remIdx !== -1 && r[remIdx]) ? r[remIdx].trim() : '0';
+    const remRaw = (remIdx !== -1 && r[remIdx]) ? r[remIdx].trim() : '';
     const lessRaw = (lessIdx !== -1 && r[lessIdx]) ? r[lessIdx].trim() : '';
 
     if (link) {
@@ -119,7 +129,12 @@ function parseCsv(text, asinCache) {
       }
     }
 
-    if (!name && !asin) continue;
+    // If name is blank but ASIN or Link is present, generate fallback product name
+    if (!name && asin) {
+      name = `${brand} - ${asin}`;
+    } else if (!name && !asin) {
+      continue;
+    }
 
     let platform = 'Product';
     if (link.includes('amazon.')) platform = 'Amazon';
@@ -132,7 +147,15 @@ function parseCsv(text, asinCache) {
 
     const qty = parseInt(qtyRaw, 10) || 0;
     const done = parseInt(doneRaw, 10) || 0;
-    const remaining = parseInt(remRaw, 10) || 0;
+    
+    // Smart Remaining: If user left Remaining empty or formula failed, compute qty - done
+    let remaining;
+    if (remRaw !== '' && !isNaN(parseInt(remRaw, 10))) {
+      remaining = parseInt(remRaw, 10);
+    } else {
+      remaining = Math.max(0, qty - done);
+    }
+
     const image = (asin && asinCache[asin]) ? asinCache[asin] : '';
 
     if (brand) brandSet.add(brand);
@@ -151,22 +174,32 @@ function parseCsv(text, asinCache) {
     });
   }
 
-  const brands = Array.from(brandSet).sort();
+  // Preserve natural Sheet order (insertion order in Set) so newly added brands appear at the bottom!
+  const brands = Array.from(brandSet);
   return { items, brands };
 }
 
 export default async function handler(req, res) {
-  // Set strict zero-cache headers
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  // Set strict zero-cache headers for instant real-time reflection
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
   res.setHeader('Access-Control-Allow-Origin', '*');
 
   try {
-    // 1. Load ASIN Cache
+    // 1. Load ASIN Cache (robust relative & cwd path)
     let asinCache = {};
-    const cachePath = path.join(process.cwd(), 'asin_cache.json');
-    if (fs.existsSync(cachePath)) {
+    const cwdPath = path.join(process.cwd(), 'asin_cache.json');
+    let cachePath = fs.existsSync(cwdPath) ? cwdPath : null;
+    if (!cachePath) {
+      try {
+        const fileDir = path.dirname(fileURLToPath(import.meta.url));
+        const relPath = path.join(fileDir, '../asin_cache.json');
+        if (fs.existsSync(relPath)) cachePath = relPath;
+      } catch (e) {}
+    }
+    if (cachePath && fs.existsSync(cachePath)) {
       try {
         asinCache = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
       } catch (e) {

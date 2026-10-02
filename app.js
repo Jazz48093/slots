@@ -10,13 +10,13 @@
   // Application State
   const state = {
     items: [],
-    brands: [],
+    brands: [], // Preserves Google Sheet order
     stats: null,
     filteredItems: [],
     currentBrand: 'all',
     currentFilter: 'all',
     searchQuery: '',
-    showSlotsOver: false, // Hidden slots (≤ 0) are hidden by default; user turns on via toggle
+    showSlotsOver: true, // Show all products by default so newly added items are never hidden
     countdown: 30,
     countdownInterval: null,
     isSyncing: false,
@@ -39,7 +39,10 @@
     searchInput: document.getElementById('searchInput'),
     searchClearBtn: document.getElementById('searchClearBtn'),
     btnSyncNow: document.getElementById('btnSyncNow'),
+    btnSyncText: document.getElementById('btnSyncText'),
     syncIcon: document.getElementById('syncIcon'),
+    btnQuickRefresh: document.getElementById('btnQuickRefresh'),
+    countdownBadge: document.getElementById('countdownBadge'),
     btnRefreshImages: document.getElementById('btnRefreshImages'),
     refreshImagesIcon: document.getElementById('refreshImagesIcon'),
     countdownSeconds: document.getElementById('countdownSeconds'),
@@ -169,13 +172,17 @@
   }
 
   /**
-   * Fetch Live Data from Proxy API
+   * Fetch Live Data from Proxy API with aggressive cache-busting
    */
   async function fetchLiveData(isManual = false) {
     if (state.isSyncing) return;
     state.isSyncing = true;
 
+    const quickRefreshIcon = document.querySelector('.quick-refresh-icon');
+
     if (elements.syncIcon) elements.syncIcon.classList.add('is-spinning');
+    if (quickRefreshIcon) quickRefreshIcon.classList.add('is-spinning');
+    if (elements.btnSyncText) elements.btnSyncText.textContent = 'Refreshing...';
     if (elements.lastSyncTime) elements.lastSyncTime.textContent = 'Syncing...';
 
     // Show purge animation on initial load or manual refresh
@@ -186,10 +193,15 @@
     }
 
     try {
-      const url = `/api/data?_t=${Date.now()}`;
+      const ts = Date.now();
+      const url = `/api/data?_nocache=${ts}&_t=${ts}`;
       const res = await fetch(url, {
         cache: 'no-store',
-        headers: { 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' }
+        headers: {
+          'Pragma': 'no-cache',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Expires': '0'
+        }
       });
 
       if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
@@ -197,7 +209,7 @@
 
       if (data.status === 'success') {
         state.items = data.items || [];
-        state.brands = data.brands || [];
+        state.brands = data.brands || []; // In Google Sheet order
         state.stats = data.stats || null;
         state.lastSyncTimestamp = Date.now();
 
@@ -210,7 +222,7 @@
         if (elements.lastSyncTime) elements.lastSyncTime.textContent = `Synced: ${timeStr}`;
 
         if (isManual) {
-          showToast(`✓ Synced ${state.items.length} items successfully!`, 'success');
+          showToast(`✓ Real-time sync complete: ${state.items.length} items loaded!`, 'success');
         }
       } else {
         throw new Error(data.message || 'API error');
@@ -222,6 +234,8 @@
     } finally {
       state.isSyncing = false;
       if (elements.syncIcon) elements.syncIcon.classList.remove('is-spinning');
+      if (quickRefreshIcon) quickRefreshIcon.classList.remove('is-spinning');
+      if (elements.btnSyncText) elements.btnSyncText.textContent = 'Refresh Live';
       if (elements.purgeLoadingView) elements.purgeLoadingView.style.display = 'none';
       if (elements.productGridContainer) elements.productGridContainer.style.display = 'block';
       resetCountdown();
@@ -248,7 +262,7 @@
   }
 
   /**
-   * Render Multi-Brand Filter Chips
+   * Render Multi-Brand Filter Chips in Google Sheet Order
    */
   function renderBrandChips() {
     if (elements.countBrandAll) elements.countBrandAll.textContent = state.items.length;
@@ -260,6 +274,7 @@
       brandCounts[b] = (brandCounts[b] || 0) + 1;
     });
 
+    // state.brands preserves insertion order from the Google Sheet!
     const html = state.brands.map(brand => {
       const count = brandCounts[brand] || 0;
       const isActive = state.currentBrand === brand ? 'active' : '';
@@ -293,6 +308,14 @@
       });
     }
     applyFiltersAndRender();
+
+    // Scroll to brand section if in multi-brand view
+    if (brand !== 'all') {
+      const section = document.getElementById(`brand-group-${encodeURIComponent(brand)}`);
+      if (section) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
   }
 
   /**
@@ -338,8 +361,8 @@
 
       const status = getSlotStatus(item.remaining);
 
-      // 2. Hidden slots are hidden by default (remaining <= 0); user can turn on via toggle or on 'over' tab
-      if (!showOver && status.category === 'over' && filter !== 'over') {
+      // 2. Hide completed slots only if user explicitly toggles switch off AND not on 'over' tab
+      if (!showOver && status.category === 'over' && filter !== 'over' && filter !== 'all') {
         return false;
       }
 
@@ -363,7 +386,8 @@
   }
 
   /**
-   * Render either the Grouped Brand Sections or Empty State
+   * Render either Grouped Brand Sections or Single Brand View
+   * Preserves the EXACT natural order from Google Sheets!
    */
   function renderCurrentView() {
     const count = state.filteredItems.length;
@@ -377,34 +401,63 @@
     if (elements.emptyState) elements.emptyState.style.display = 'none';
     if (elements.productGridContainer) elements.productGridContainer.style.display = 'block';
 
-    // Group items by brand
+    // Group items by brand PRESERVING SHEET ORDER (insertion order)
+    const brandOrder = [];
     const grouped = {};
     state.filteredItems.forEach(item => {
       const b = item.brand || 'General';
-      if (!grouped[b]) grouped[b] = [];
+      if (!grouped[b]) {
+        grouped[b] = [];
+        brandOrder.push(b);
+      }
       grouped[b].push(item);
     });
 
-    const brandKeys = Object.keys(grouped).sort();
+    // If single brand selected or only one brand in list
+    if (brandOrder.length <= 1) {
+      const singleBrandName = brandOrder[0] || 'Products';
+      const items = grouped[singleBrandName] || [];
+      const bTarget = items.reduce((s, it) => s + (it.qty || 0), 0);
+      const bDone = items.reduce((s, it) => s + (it.done || 0), 0);
+      const bRem = items.reduce((s, it) => s + (it.remaining || 0), 0);
 
-    // If only one brand exists or user selected a single brand, show standard grid
-    if (brandKeys.length <= 1) {
-      const items = grouped[brandKeys[0]] || [];
-      elements.productGridContainer.innerHTML = `
-        <div class="product-grid" id="productGrid" aria-label="Product Showcase Grid">
-          ${items.map(renderCardHtml).join('')}
-        </div>
-      `;
+      if (state.currentBrand !== 'all') {
+        elements.productGridContainer.innerHTML = `
+          <section class="brand-group" id="brand-group-${encodeURIComponent(singleBrandName)}">
+            <div class="brand-group-header glass-panel">
+              <div class="brand-group-left">
+                <div class="brand-group-badge-icon">🏷️</div>
+                <h2 class="brand-group-title">${escapeHtml(singleBrandName)}</h2>
+                <span class="brand-group-count">${items.length} Products</span>
+              </div>
+              <div class="brand-group-stats">
+                <span class="brand-stat-pill">Target: <strong>${bTarget}</strong></span>
+                <span class="brand-stat-pill">Done: <strong>${bDone}</strong></span>
+                <span class="brand-stat-pill pill-remaining">Slots Left: <strong>${bRem}</strong></span>
+              </div>
+            </div>
+            <div class="product-grid" id="productGrid" aria-label="Product Showcase Grid">
+              ${items.map(renderCardHtml).join('')}
+            </div>
+          </section>
+        `;
+      } else {
+        elements.productGridContainer.innerHTML = `
+          <div class="product-grid" id="productGrid" aria-label="Product Showcase Grid">
+            ${items.map(renderCardHtml).join('')}
+          </div>
+        `;
+      }
     } else {
-      // Multi-brand view: render stylish brand sections with summary headers!
-      const html = brandKeys.map(bName => {
+      // Multi-brand view: render stylish brand sections with summary headers in Sheet Order!
+      const html = brandOrder.map(bName => {
         const items = grouped[bName];
         const bTarget = items.reduce((s, it) => s + (it.qty || 0), 0);
         const bDone = items.reduce((s, it) => s + (it.done || 0), 0);
         const bRem = items.reduce((s, it) => s + (it.remaining || 0), 0);
 
         return `
-          <section class="brand-group">
+          <section class="brand-group" id="brand-group-${encodeURIComponent(bName)}">
             <div class="brand-group-header glass-panel">
               <div class="brand-group-left">
                 <div class="brand-group-badge-icon">🏷️</div>
@@ -655,9 +708,19 @@
    * Event Listeners Setup
    */
   function setupEventListeners() {
-    // Sync Button
+    // Top Live Refresh Button
     if (elements.btnSyncNow) {
       elements.btnSyncNow.addEventListener('click', () => fetchLiveData(true));
+    }
+
+    // Brand Bar Quick Refresh Button
+    if (elements.btnQuickRefresh) {
+      elements.btnQuickRefresh.addEventListener('click', () => fetchLiveData(true));
+    }
+
+    // Countdown Badge click triggers immediate refresh
+    if (elements.countdownBadge) {
+      elements.countdownBadge.addEventListener('click', () => fetchLiveData(true));
     }
 
     // Refresh Images Button
@@ -733,6 +796,8 @@
         state.currentBrand = 'all';
         state.currentFilter = 'all';
         state.searchQuery = '';
+        state.showSlotsOver = true;
+        if (elements.showSlotsOverCheckbox) elements.showSlotsOverCheckbox.checked = true;
         if (elements.searchInput) elements.searchInput.value = '';
         if (elements.searchClearBtn) elements.searchClearBtn.style.display = 'none';
         if (elements.btnBrandAll) elements.btnBrandAll.classList.add('active');

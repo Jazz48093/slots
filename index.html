@@ -58,7 +58,7 @@
         </div>
 
         <!-- Auto-refresh Countdown Pill -->
-        <div class="countdown-pill" id="countdownBadge" title="Next automatic anti-cache refresh">
+        <div class="countdown-pill" id="countdownBadge" title="Click to refresh instantly (Next auto-refresh in 30s)">
           <svg class="timer-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
             <circle cx="12" cy="12" r="10"></circle>
             <polyline points="12 6 12 12 16 14"></polyline>
@@ -76,12 +76,12 @@
           <span>Refresh Images</span>
         </button>
 
-        <!-- Sync Latest Data Button -->
-        <button id="btnSyncNow" class="btn-primary-glass" title="Fetch fresh data from Google Sheet without cache (R)">
+        <!-- Live Real-time Refresh Button -->
+        <button id="btnSyncNow" class="btn-primary-glass" title="Instantly refresh live data from Google Sheet in real time (Shortcut: R)">
           <svg id="syncIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
             <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
           </svg>
-          <span>Sync Latest Data</span>
+          <span id="btnSyncText">Refresh Live</span>
         </button>
       </div>
     </header>
@@ -167,7 +167,15 @@
 
     <!-- Multi-Brand Chip Selector -->
     <div class="brand-filter-bar" id="brandFilterBar" aria-label="Filter by Brand">
-      <span class="brand-filter-label">Brand:</span>
+      <div class="brand-filter-label-group">
+        <span class="brand-filter-label">Brand:</span>
+        <button id="btnQuickRefresh" class="brand-quick-refresh-btn" title="Refresh sheet in real time (R)" aria-label="Refresh sheet in real time">
+          <svg class="quick-refresh-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+          </svg>
+          <span>Refresh</span>
+        </button>
+      </div>
       <button class="brand-chip-btn active" data-brand="all" id="btnBrandAll">
         <span>All Brands</span>
         <span class="chip-count" id="countBrandAll">0</span>
@@ -201,8 +209,8 @@
       </div>
 
       <div class="filter-right-group">
-        <label class="toggle-hide-switch" title="Slots over (≤ 0) are hidden by default — click toggle to show them" aria-label="Show slots over products">
-          <input type="checkbox" id="showSlotsOverCheckbox">
+        <label class="toggle-hide-switch" title="Toggle visibility of completed products (≤ 0 slots left)" aria-label="Show slots over products">
+          <input type="checkbox" id="showSlotsOverCheckbox" checked>
           <span class="switch-track">
             <span class="switch-thumb"></span>
           </span>
@@ -213,7 +221,7 @@
               <line x1="12" y1="16" x2="12" y2="12"></line>
               <line x1="12" y1="8" x2="12.01" y2="8"></line>
             </svg>
-            <span class="switch-tooltip-bubble" id="hideSlotsTooltip" role="tooltip">Slots over (≤ 0) are hidden by default — click to show</span>
+            <span class="switch-tooltip-bubble" id="hideSlotsTooltip" role="tooltip">Toggle visibility of products with zero slots left</span>
           </span>
         </label>
         <div class="filter-meta">

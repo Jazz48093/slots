@@ -197,7 +197,9 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
                     rem_raw = get_val(rem_idx) or '0'
                     less_raw = get_val(less_idx)
 
-                    if not name and not asin:
+                    if not name and asin:
+                        name = f"{brand} - {asin}"
+                    elif not name and not asin:
                         continue
 
                     # Normalize link
@@ -225,9 +227,9 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
                         done = 0
 
                     try:
-                        remaining = int(float(rem_raw))
+                        remaining = int(float(rem_raw)) if rem_raw and rem_raw.strip() else max(0, qty - done)
                     except Exception:
-                        remaining = 0
+                        remaining = max(0, qty - done)
 
                     # Look up image in cache
                     image = asin_cache.get(asin, "")
@@ -253,7 +255,7 @@ class LiveProxyHandler(http.server.SimpleHTTPRequestHandler):
                 if missing_asins:
                     background_fetch_missing_asins(missing_asins)
 
-                brands = sorted(list(brand_set))
+                brands = list(dict.fromkeys([item['brand'] for item in items if item.get('brand')]))
 
             total_target = sum(item["qty"] for item in items)
             total_done = sum(item["done"] for item in items)
