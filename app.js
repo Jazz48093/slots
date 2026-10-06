@@ -1,25 +1,16 @@
 /**
  * SLOTS LIVE COUNTER - MULTI-BRAND APPLICATION
  * Real-time order targets, fulfilled quantities, and remaining slots
- * with Google Sign-in Auth Gate, Brand grouping, zero-cache live proxy, and instant state sync.
+ * with Brand grouping, zero-cache live proxy, and instant state sync.
  */
 
 (function () {
   'use strict';
 
-  // Configurable Google OAuth 2.0 Web Client ID
-  const DEFAULT_GOOGLE_CLIENT_ID = '717148562774-6s5tkm4p1q94i7u5j3k48k13d6a2hfl6.apps.googleusercontent.com';
-
   // Application State
   const state = {
-    // Auth State
-    user: null,
-    isAuthenticated: false,
-    googleClientId: localStorage.getItem('custom_google_client_id') || DEFAULT_GOOGLE_CLIENT_ID,
-
-    // Data State
     items: [],
-    brands: [], // Preserves Google Sheet natural order
+    brands: [], // Preserves Google Sheet order
     stats: null,
     filteredItems: [],
     currentBrand: 'all',
@@ -36,7 +27,6 @@
 
   // DOM Elements
   const elements = {
-    appContainer: document.querySelector('.app-container'),
     productGridContainer: document.getElementById('productGridContainer'),
     productGrid: document.getElementById('productGrid'),
     purgeLoadingView: document.getElementById('purgeLoadingView'),
@@ -45,28 +35,6 @@
     showSlotsOverCheckbox: document.getElementById('showSlotsOverCheckbox'),
     hideSlotsTooltip: document.getElementById('hideSlotsTooltip'),
     
-    // Auth Elements
-    authLockOverlay: document.getElementById('authLockOverlay'),
-    btnNativeGoogleSignIn: document.getElementById('btnNativeGoogleSignIn'),
-    googleAccountPicker: document.getElementById('googleAccountPicker'),
-    btnClosePicker: document.getElementById('btnClosePicker'),
-    btnSelectJazzAccount: document.getElementById('btnSelectJazzAccount'),
-    btnToggleOtherAccount: document.getElementById('btnToggleOtherAccount'),
-    customAccountForm: document.getElementById('customAccountForm'),
-    customEmailInput: document.getElementById('customEmailInput'),
-    googleSignInBtn: document.getElementById('googleSignInBtn'),
-    authStatusAlert: document.getElementById('authStatusAlert'),
-    btnQuickDemoLogin: document.getElementById('btnQuickDemoLogin'),
-    btnClientIdConfig: document.getElementById('btnClientIdConfig'),
-    clientIdModal: document.getElementById('clientIdModal'),
-    customClientIdInput: document.getElementById('customClientIdInput'),
-    btnSaveClientId: document.getElementById('btnSaveClientId'),
-    userProfileBadge: document.getElementById('userProfileBadge'),
-    userAvatar: document.getElementById('userAvatar'),
-    userName: document.getElementById('userName'),
-    userEmail: document.getElementById('userEmail'),
-    btnSignOut: document.getElementById('btnSignOut'),
-
     // Header & Controls
     searchInput: document.getElementById('searchInput'),
     searchClearBtn: document.getElementById('searchClearBtn'),
@@ -102,152 +70,6 @@
     
     toastContainer: document.getElementById('toastContainer'),
   };
-
-  /**
-   * Helper: Parse Google JWT ID Token
-   */
-  function parseJwt(token) {
-    try {
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      );
-      return JSON.parse(jsonPayload);
-    } catch (e) {
-      console.error('Failed to parse Google JWT:', e);
-      return null;
-    }
-  }
-
-  /**
-   * Lock the dashboard (require Google login)
-   */
-  function lockDashboard() {
-    if (elements.authLockOverlay) {
-      elements.authLockOverlay.classList.remove('is-hidden');
-    }
-    if (elements.appContainer) {
-      elements.appContainer.classList.add('is-locked');
-    }
-    if (elements.userProfileBadge) {
-      elements.userProfileBadge.style.display = 'none';
-    }
-  }
-
-  /**
-   * Unlock the dashboard after successful authentication
-   */
-  function unlockDashboard() {
-    if (elements.authLockOverlay) {
-      elements.authLockOverlay.classList.add('is-hidden');
-    }
-    if (elements.appContainer) {
-      elements.appContainer.classList.remove('is-locked');
-    }
-    if (elements.userProfileBadge && state.user) {
-      elements.userProfileBadge.style.display = 'inline-flex';
-      if (elements.userName) elements.userName.textContent = state.user.name;
-      if (elements.userEmail) elements.userEmail.textContent = state.user.email;
-      if (elements.userAvatar) {
-        elements.userAvatar.src = state.user.picture || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="%234F46E5"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>';
-      }
-    }
-  }
-
-  /**
-   * Complete user authentication
-   */
-  function authenticateUser(user, showToastMsg = false) {
-    state.user = user;
-    state.isAuthenticated = true;
-    localStorage.setItem('slots_user_session', JSON.stringify(user));
-
-    unlockDashboard();
-
-    if (showToastMsg) {
-      showToast(`✓ Welcome, ${user.name}!`, 'success');
-    }
-
-    // Load fresh data if not already loaded
-    if (state.items.length === 0) {
-      fetchLiveData(false);
-    }
-  }
-
-  /**
-   * Sign Out
-   */
-  function signOut() {
-    state.user = null;
-    state.isAuthenticated = false;
-    localStorage.removeItem('slots_user_session');
-
-    lockDashboard();
-    setupGoogleButton();
-    showToast('Signed out of dashboard', 'info');
-  }
-
-  /**
-   * Handle Google Credential Response from GSI
-   */
-  function handleGoogleCredentialResponse(response) {
-    if (!response || !response.credential) {
-      showToast('Google Sign-In failed', 'error');
-      return;
-    }
-
-    const payload = parseJwt(response.credential);
-    if (payload && payload.email) {
-      const user = {
-        name: payload.name || payload.email.split('@')[0],
-        email: payload.email,
-        picture: payload.picture || '',
-        sub: payload.sub,
-        loginTime: Date.now()
-      };
-      authenticateUser(user, true);
-    } else {
-      showToast('Could not verify Google account details', 'error');
-    }
-  }
-
-  /**
-   * Setup Native Google Authentication UI
-   */
-  function setupGoogleButton() {
-    if (elements.googleAccountPicker) {
-      elements.googleAccountPicker.style.display = 'block';
-    }
-  }
-
-  /**
-   * Initialize Authentication
-   */
-  function initAuth() {
-    // 1. Check for active saved session
-    const saved = localStorage.getItem('slots_user_session');
-    if (saved) {
-      try {
-        const user = JSON.parse(saved);
-        if (user && user.email) {
-          authenticateUser(user, false);
-          return;
-        }
-      } catch (e) {
-        localStorage.removeItem('slots_user_session');
-      }
-    }
-
-    // 2. Lock dashboard by default
-    lockDashboard();
-
-    // 3. Initialize Google Sign-in button
-    setupGoogleButton();
-  }
 
   /**
    * Evaluates slot count and produces user-defined badge, text, and disabled status.
@@ -353,10 +175,6 @@
    * Fetch Live Data from Proxy API with aggressive cache-busting
    */
   async function fetchLiveData(isManual = false) {
-    if (!state.isAuthenticated) {
-      return; // Do not fetch data when locked
-    }
-
     if (state.isSyncing) return;
     state.isSyncing = true;
 
@@ -391,7 +209,7 @@
 
       if (data.status === 'success') {
         state.items = data.items || [];
-        state.brands = data.brands || []; // In Google Sheet natural order
+        state.brands = data.brands || []; // In Google Sheet order
         state.stats = data.stats || null;
         state.lastSyncTimestamp = Date.now();
 
@@ -890,123 +708,6 @@
    * Event Listeners Setup
    */
   function setupEventListeners() {
-    // Native Google Sign In Button (Clicks direct login as Jazz)
-    if (elements.btnNativeGoogleSignIn) {
-      elements.btnNativeGoogleSignIn.addEventListener('click', () => {
-        authenticateUser({
-          name: 'Jazz',
-          email: 'jazz48093@gmail.com',
-          picture: 'https://api.dicebear.com/7.x/initials/svg?seed=Jazz&backgroundColor=4285f4',
-          sub: 'google-user-jazz48093',
-          loginTime: Date.now()
-        }, true);
-      });
-    }
-
-    // Direct click on Jazz account card in account picker
-    if (elements.btnSelectJazzAccount) {
-      elements.btnSelectJazzAccount.addEventListener('click', () => {
-        authenticateUser({
-          name: 'Jazz',
-          email: 'jazz48093@gmail.com',
-          picture: 'https://api.dicebear.com/7.x/initials/svg?seed=Jazz&backgroundColor=4285f4',
-          sub: 'google-user-jazz48093',
-          loginTime: Date.now()
-        }, true);
-      });
-    }
-
-    // Close button for Account Picker
-    if (elements.btnClosePicker) {
-      elements.btnClosePicker.addEventListener('click', () => {
-        if (elements.googleAccountPicker) {
-          elements.googleAccountPicker.style.display = 'none';
-        }
-      });
-    }
-
-    // Toggle custom Gmail form
-    if (elements.btnToggleOtherAccount) {
-      elements.btnToggleOtherAccount.addEventListener('click', () => {
-        if (!elements.customAccountForm) return;
-        const isHidden = elements.customAccountForm.style.display === 'none';
-        elements.customAccountForm.style.display = isHidden ? 'flex' : 'none';
-        if (isHidden && elements.customEmailInput) {
-          elements.customEmailInput.focus();
-        }
-      });
-    }
-
-    // Custom Gmail account submission
-    if (elements.customAccountForm) {
-      elements.customAccountForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const email = (elements.customEmailInput.value || '').trim();
-        if (!email || !email.includes('@')) {
-          showToast('Please enter a valid Gmail / Email address', 'error');
-          return;
-        }
-
-        const username = email.split('@')[0];
-        const displayName = username.charAt(0).toUpperCase() + username.slice(1);
-
-        authenticateUser({
-          name: displayName,
-          email: email,
-          picture: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=4285f4`,
-          sub: 'google-custom-' + Date.now(),
-          loginTime: Date.now()
-        }, true);
-      });
-    }
-
-    // Sign Out Button
-    if (elements.btnSignOut) {
-      elements.btnSignOut.addEventListener('click', signOut);
-    }
-
-    // Quick Demo Sign In
-    if (elements.btnQuickDemoLogin) {
-      elements.btnQuickDemoLogin.addEventListener('click', () => {
-        authenticateUser({
-          name: 'Demo Admin',
-          email: 'admin@brand-slots.app',
-          picture: 'https://api.dicebear.com/7.x/bottts/svg?seed=BrandSlots',
-          sub: 'demo-12345',
-          loginTime: Date.now()
-        }, true);
-      });
-    }
-
-    // Client ID Config Modal Toggle
-    if (elements.btnClientIdConfig) {
-      elements.btnClientIdConfig.addEventListener('click', () => {
-        if (!elements.clientIdModal) return;
-        const isShown = elements.clientIdModal.style.display !== 'none';
-        elements.clientIdModal.style.display = isShown ? 'none' : 'block';
-        if (!isShown && elements.customClientIdInput) {
-          elements.customClientIdInput.value = state.googleClientId;
-          elements.customClientIdInput.focus();
-        }
-      });
-    }
-
-    // Save Client ID Button
-    if (elements.btnSaveClientId) {
-      elements.btnSaveClientId.addEventListener('click', () => {
-        const val = (elements.customClientIdInput.value || '').trim();
-        if (val) {
-          state.googleClientId = val;
-          localStorage.setItem('custom_google_client_id', val);
-          if (elements.clientIdModal) elements.clientIdModal.style.display = 'none';
-          setupGoogleButton();
-          showToast('✓ Google Client ID saved!', 'success');
-        } else {
-          showToast('Please enter a valid Client ID', 'error');
-        }
-      });
-    }
-
     // Top Live Refresh Button
     if (elements.btnSyncNow) {
       elements.btnSyncNow.addEventListener('click', () => fetchLiveData(true));
@@ -1106,10 +807,17 @@
     }
   }
 
-  // Initialize Application
+  // Initialize
   document.addEventListener('DOMContentLoaded', () => {
+    // Scrub any legacy auth sessions for privacy & clean open access
+    try {
+      localStorage.removeItem('slots_user_session');
+      localStorage.removeItem('custom_google_client_id');
+      sessionStorage.removeItem('slots_admin_authenticated');
+    } catch (e) {}
+
     setupEventListeners();
-    initAuth();
+    fetchLiveData(false);
   });
 
 })();
